@@ -1,101 +1,83 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Background } from '@/components/layout/Background';
+import { Header } from '@/components/layout/Header';
+import { Footer } from '@/components/layout/Footer';
+import { BridgeCard } from '@/components/bridge/BridgeCard';
+import { ConvertCard } from '@/components/bridge/ConvertCard';
+import { PendingTransactionsModal } from '@/components/bridge/PendingTransactions';
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  // Prevent hydration mismatch: wallet-dependent components (BridgeCard,
+  // ConvertCard, Header wallet buttons) read wallet/balance state that
+  // differs between server (no wallet) and client (wallet auto-connected).
+  // Defer rendering until after hydration completes.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+  return (
+    <>
+      <Background />
+      <div style={{ position: 'relative', zIndex: 2, minHeight: '100vh' }}>
+        <Header />
+
+        <main style={{ maxWidth: 520, margin: '0 auto', padding: '0 24px 48px' }}>
+          {/* Headline */}
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+            <h1 style={{ fontSize: 28, fontWeight: 600, color: '#ffc547' }}>
+              The POKT Multichain Bridge
+            </h1>
+          </div>
+
+          {mounted ? (
+            <>
+              <BridgeCard />
+              <ConvertCard />
+            </>
+          ) : (
+            /* Server/initial render placeholder matching card dimensions */
+            <div
+              style={{
+                background: 'linear-gradient(180deg, #232a2f 0%, #1e2428 100%)',
+                borderRadius: 24,
+                border: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: '0 4px 24px rgba(0,0,0,0.4), 0 0 80px rgba(2,90,242,0.1), inset 0 1px 0 rgba(255,255,255,0.05)',
+                overflow: 'hidden',
+                minHeight: 500,
+              }}
+            >
+              {/* Skeleton tabs */}
+              <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ flex: 1, padding: '18px 24px', textAlign: 'center', color: '#f6f6f6', fontSize: 15, fontWeight: 500, position: 'relative' }}>
+                  EVM
+                  <div style={{ position: 'absolute', bottom: -1, left: 24, right: 24, height: 2, background: '#4c9bf5', borderRadius: '2px 2px 0 0' }} />
+                </div>
+                <div style={{ flex: 1, padding: '18px 24px', textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: 15, fontWeight: 500 }}>
+                  Solana
+                </div>
+              </div>
+              {/* Loading indicator */}
+              <div style={{ padding: 24, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+                <div
+                  className="animate-spin-slow"
+                  style={{
+                    width: 32,
+                    height: 32,
+                    border: '3px solid rgba(255,255,255,0.1)',
+                    borderTopColor: '#025af2',
+                    borderRadius: '50%',
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          <Footer />
+        </main>
+      </div>
+
+      {/* Modal rendered at page level */}
+      {mounted && <PendingTransactionsModal />}
+    </>
   );
 }
