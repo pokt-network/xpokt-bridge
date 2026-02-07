@@ -24,6 +24,15 @@ export function Footer() {
       >
         Track Transactions
       </a>
+      {' '}&middot;{' '}
+      <a 
+        href="https://github.com/pokt-network/xpokt-bridge"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: '#025af2', textDecoration: 'none' }}
+      >
+        Github
+      </a>
     </div>
   );
 }

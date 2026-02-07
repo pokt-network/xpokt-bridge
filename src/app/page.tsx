@@ -25,9 +25,12 @@ export default function Home() {
         <main style={{ maxWidth: 520, margin: '0 auto', padding: '0 24px 48px' }}>
           {/* Headline */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
-            <h1 style={{ fontSize: 28, fontWeight: 600, color: '#ffc547' }}>
+            <h1 style={{ fontSize: 28, fontWeight: 600, color: '#ffc547', marginBottom: 18 }}>
               The POKT Multichain Bridge
             </h1>
+            <p style={{ fontSize: 16, fontWeight: 400, color: '#fffff' }}>
+              Bridge <a style={{ color: '#4c9bf5', textDecorationLine: 'underline' }} href="https://wpokt.network" target="_blank">wPOKT</a> to Base or Solana using the xERC20 token.
+            </p>
           </div>
 
           {mounted ? (

@@ -11,7 +11,7 @@ export function Header() {
   const showSolanaWallet = state.activeTab === 'solana';
 
   return (
-    <header className="flex justify-between items-center max-w-[1200px] mx-auto p-6 mb-24">
+    <header className="flex justify-between items-center max-w-[1200px] mx-auto p-6 mb-8">
       <img
         src={BRAND_ASSETS.logo}
         alt="Pocket Network"

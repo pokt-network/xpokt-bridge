@@ -12,10 +12,8 @@ export const wagmiConfig = createConfig({
     }),
   ],
   transports: {
-    // Explicit public RPCs that support CORS from any origin.
-    // The default wagmi RPCs (e.g. eth.merkle.io) may block CORS during
-    // local development, causing balance reads to silently fail.
-    [mainnet.id]: http('https://eth.llamarpc.com'),
-    [base.id]: http('https://mainnet.base.org'),
+    // Pocket Network public RPC endpoints (CORS-friendly, no API key required).
+    [mainnet.id]: http('https://eth.api.pocket.network'),
+    [base.id]: http('https://base.api.pocket.network'),
   },
 });

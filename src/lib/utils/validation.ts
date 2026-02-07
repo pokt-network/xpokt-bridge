@@ -1,8 +1,115 @@
+import { z } from 'zod';
 import { TOKEN_DECIMALS } from './constants';
 
 export interface ValidationResult {
   valid: boolean;
   error?: string;
+}
+
+// ============================================================================
+// Zod Schemas for localStorage data validation
+// ============================================================================
+
+/** Chain enum */
+const chainSchema = z.enum(['ethereum', 'base', 'solana']);
+
+/** Transaction status enum */
+const txStatusSchema = z.enum([
+  'idle', 'pending', 'confirmed', 'waiting-vaa',
+  'vaa-ready', 'claiming', 'converting', 'complete', 'error',
+]);
+
+/** Pre-conversion info (Lockbox step before bridge) */
+const preConversionSchema = z.object({
+  required: z.boolean(),
+  wpoktApproveTxHash: z.string().optional(),
+  lockboxDepositTxHash: z.string().optional(),
+}).optional();
+
+/** Wormhole transfer metadata */
+const wormholeSchema = z.object({
+  emitterChain: z.number().int().nonnegative(),
+  emitterAddress: z.string().min(1).max(128),
+  sequence: z.string().min(1).max(32),
+  vaaBytes: z.string().optional(),
+}).optional();
+
+/**
+ * Full StoredTransaction schema.
+ *
+ * Validates data loaded from localStorage to prevent:
+ * - Malicious browser extensions injecting crafted transactions
+ * - XSS payloads tampering with pending transaction data
+ * - Corrupted data from storage errors
+ */
+export const storedTransactionSchema = z.object({
+  id: z.string().min(1).max(128),
+  sourceChain: chainSchema,
+  destChain: chainSchema,
+  amount: z.string().min(1).max(64),
+  amountRaw: z.string().min(1).max(128),
+  status: txStatusSchema,
+  createdAt: z.number().int().positive(),
+  updatedAt: z.number().int().positive(),
+  sourceTxHash: z.string().max(128),
+  destToken: z.enum(['wpokt', 'xpokt']).optional(),
+  preConversion: preConversionSchema,
+  wormhole: wormholeSchema,
+  destTxHash: z.string().max(128).optional(),
+  conversionTxHash: z.string().max(128).optional(),
+  // Wallet address that initiated this transaction — for ownership verification
+  initiatorAddress: z.string().max(128).optional(),
+});
+
+/** Array of stored transactions — capped at 100 to prevent memory exhaustion */
+export const storedTransactionsArraySchema = z.array(storedTransactionSchema).max(100);
+
+/**
+ * Parse and validate stored transactions from localStorage.
+ * Returns only valid entries; silently drops malformed ones.
+ */
+export function parseStoredTransactions(raw: string): z.infer<typeof storedTransactionSchema>[] {
+  try {
+    const parsed = JSON.parse(raw);
+    const result = storedTransactionsArraySchema.safeParse(parsed);
+    if (result.success) {
+      return result.data;
+    }
+    // If the whole array fails, try to salvage individual valid entries
+    if (Array.isArray(parsed)) {
+      const valid = parsed
+        .map((entry: unknown) => storedTransactionSchema.safeParse(entry))
+        .filter((r): r is z.SafeParseSuccess<z.infer<typeof storedTransactionSchema>> => r.success)
+        .map(r => r.data);
+      console.warn(
+        `[Validation] ${parsed.length - valid.length} of ${parsed.length} stored transactions failed validation — dropped`
+      );
+      return valid;
+    }
+    console.warn('[Validation] Stored transactions data is not an array — discarding');
+    return [];
+  } catch {
+    console.warn('[Validation] Failed to parse stored transactions JSON — discarding');
+    return [];
+  }
+}
+
+/**
+ * Filter stored transactions to only those initiated by the given wallet address.
+ * Transactions without an initiatorAddress are included (legacy data).
+ */
+export function filterByWalletOwnership(
+  transactions: z.infer<typeof storedTransactionSchema>[],
+  walletAddress: string | undefined
+): z.infer<typeof storedTransactionSchema>[] {
+  if (!walletAddress) return transactions;
+  const normalized = walletAddress.toLowerCase();
+  return transactions.filter(tx => {
+    // Include transactions with no initiator (legacy data before this check was added)
+    if (!tx.initiatorAddress) return true;
+    // Match by normalized address (case-insensitive for EVM)
+    return tx.initiatorAddress.toLowerCase() === normalized;
+  });
 }
 
 export function validateAmount(

@@ -8,6 +8,7 @@ import { CONTRACTS } from '@/lib/contracts/addresses';
 import { ERC20_ABI } from '@/lib/contracts/abis/erc20';
 import { LOCKBOX_ABI } from '@/lib/contracts/abis/lockbox';
 import { wagmiConfig } from '@/lib/chains/config';
+import { approveIfNeeded } from '@/lib/utils/approve';
 
 /**
  * waitForTransactionReceipt with retry on transient HTTP/network errors.
@@ -72,19 +73,20 @@ export function useLockbox() {
     try {
       await ensureEthereum();
 
-      // Approve wPOKT to Lockbox
+      // Approve wPOKT to Lockbox (skip if sufficient allowance exists)
       setState({ step: 'approving', error: null });
-      const approveTx = await writeContractAsync({
-        address: CONTRACTS.ethereum.wPOKT as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [CONTRACTS.ethereum.lockbox as `0x${string}`, amount],
+      const approval = await approveIfNeeded({
+        token: CONTRACTS.ethereum.wPOKT as `0x${string}`,
+        spender: CONTRACTS.ethereum.lockbox as `0x${string}`,
+        amount,
+        owner: address as `0x${string}`,
+        chainId: 1,
+        writeContractAsync,
         chain: mainnet,
       });
-      await waitForReceiptWithRetry(approveTx, 1);
 
       // Deposit to Lockbox
-      setState(prev => ({ ...prev, step: 'converting', approveTxHash: approveTx }));
+      setState(prev => ({ ...prev, step: 'converting', approveTxHash: approval.txHash }));
       const depositTx = await writeContractAsync({
         address: CONTRACTS.ethereum.lockbox as `0x${string}`,
         abi: LOCKBOX_ABI,
@@ -94,8 +96,8 @@ export function useLockbox() {
       });
       await waitForReceiptWithRetry(depositTx, 1);
 
-      setState({ step: 'complete', txHash: depositTx, approveTxHash: approveTx, error: null });
-      return { approveTxHash: approveTx, depositTxHash: depositTx };
+      setState({ step: 'complete', txHash: depositTx, approveTxHash: approval.txHash, error: null });
+      return { approveTxHash: approval.txHash, depositTxHash: depositTx };
     } catch (error: any) {
       setState(prev => ({ ...prev, step: 'error', error: error.shortMessage || error.message || 'Deposit failed' }));
       throw error;
@@ -109,19 +111,20 @@ export function useLockbox() {
     try {
       await ensureEthereum();
 
-      // Approve xPOKT to Lockbox
+      // Approve xPOKT to Lockbox (skip if sufficient allowance exists)
       setState({ step: 'approving', error: null });
-      const approveTx = await writeContractAsync({
-        address: CONTRACTS.ethereum.xPOKT as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [CONTRACTS.ethereum.lockbox as `0x${string}`, amount],
+      const approval = await approveIfNeeded({
+        token: CONTRACTS.ethereum.xPOKT as `0x${string}`,
+        spender: CONTRACTS.ethereum.lockbox as `0x${string}`,
+        amount,
+        owner: address as `0x${string}`,
+        chainId: 1,
+        writeContractAsync,
         chain: mainnet,
       });
-      await waitForReceiptWithRetry(approveTx, 1);
 
       // Withdraw from Lockbox
-      setState(prev => ({ ...prev, step: 'converting', approveTxHash: approveTx }));
+      setState(prev => ({ ...prev, step: 'converting', approveTxHash: approval.txHash }));
       const withdrawTx = await writeContractAsync({
         address: CONTRACTS.ethereum.lockbox as `0x${string}`,
         abi: LOCKBOX_ABI,
@@ -131,8 +134,8 @@ export function useLockbox() {
       });
       await waitForReceiptWithRetry(withdrawTx, 1);
 
-      setState({ step: 'complete', txHash: withdrawTx, approveTxHash: approveTx, error: null });
-      return { approveTxHash: approveTx, withdrawTxHash: withdrawTx };
+      setState({ step: 'complete', txHash: withdrawTx, approveTxHash: approval.txHash, error: null });
+      return { approveTxHash: approval.txHash, withdrawTxHash: withdrawTx };
     } catch (error: any) {
       setState(prev => ({ ...prev, step: 'error', error: error.shortMessage || error.message || 'Withdraw failed' }));
       throw error;

@@ -35,6 +35,9 @@ export interface StoredTransaction {
   };
   destTxHash?: string;
   conversionTxHash?: string;
+  // Wallet address that initiated this transaction — for ownership verification
+  // Ensures resumed transactions can't be hijacked by localStorage tampering
+  initiatorAddress?: string;
 }
 
 export interface PendingTransaction {

@@ -11,6 +11,7 @@ import React, {
 } from 'react';
 import type { EvmChain, Chain, Tab, SolanaDirection } from '@/types/bridge';
 import type { StoredTransaction } from '@/types/transactions';
+import { parseStoredTransactions } from '@/lib/utils/validation';
 
 // ============================================================================
 // State Shape
@@ -204,12 +205,14 @@ interface BridgeProviderProps {
 export function BridgeProvider({ children }: BridgeProviderProps) {
   const [state, dispatch] = useReducer(bridgeReducer, initialState);
 
-  // Load pending transactions from localStorage on mount
+  // Load pending transactions from localStorage on mount.
+  // Data is validated with zod to prevent localStorage poisoning attacks
+  // (malicious extensions or XSS injecting crafted transaction data).
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        const pendingTxs = JSON.parse(stored) as StoredTransaction[];
+        const pendingTxs = parseStoredTransactions(stored);
         dispatch({ type: 'SET_PENDING_TRANSACTIONS', payload: pendingTxs });
       }
     } catch (error) {

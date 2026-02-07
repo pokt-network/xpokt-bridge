@@ -10,6 +10,7 @@ import { ERC20_ABI } from '@/lib/contracts/abis/erc20';
 import { LOCKBOX_ABI } from '@/lib/contracts/abis/lockbox';
 import { BRIDGE_ADAPTER_ABI } from '@/lib/contracts/abis/bridgeAdapter';
 import { wagmiConfig } from '@/lib/chains/config';
+import { approveIfNeeded } from '@/lib/utils/approve';
 import type { EvmChain } from '@/types/bridge';
 
 const TOKEN_DECIMALS = 6;
@@ -243,26 +244,25 @@ export function useCompoundEVMBridge({ sourceChain, destChain }: UseCompoundEVMB
 
       // Step 2: Lockbox conversion if needed (Ethereum only)
       if (needsConversion && lockboxAmount > 0n && contracts.lockbox) {
-        // 2a: Approve wPOKT to Lockbox
+        // 2a: Approve wPOKT to Lockbox (skip if sufficient allowance exists)
         setState(prev => ({ ...prev, step: 'approving-wpokt' }));
 
-        const wpoktApproveTx = await writeContractAsync({
-          address: contracts.wPOKT as `0x${string}`,
-          abi: ERC20_ABI,
-          functionName: 'approve',
-          args: [contracts.lockbox as `0x${string}`, lockboxAmount],
+        const wpoktApproval = await approveIfNeeded({
+          token: contracts.wPOKT as `0x${string}`,
+          spender: contracts.lockbox as `0x${string}`,
+          amount: lockboxAmount,
+          owner: address as `0x${string}`,
+          chainId: sourceChainId,
+          writeContractAsync,
           chain: sourceChainObj,
         });
 
-        await waitForTransactionReceipt(wagmiConfig, {
-          hash: wpoktApproveTx,
-          chainId: sourceChainId,
-        });
-
-        setState(prev => ({
-          ...prev,
-          txHashes: { ...prev.txHashes, wpoktApprove: wpoktApproveTx }
-        }));
+        if (wpoktApproval.txHash) {
+          setState(prev => ({
+            ...prev,
+            txHashes: { ...prev.txHashes, wpoktApprove: wpoktApproval.txHash }
+          }));
+        }
 
         // 2b: Deposit to Lockbox (wPOKT -> xPOKT)
         setState(prev => ({ ...prev, step: 'converting-lockbox' }));
@@ -286,26 +286,25 @@ export function useCompoundEVMBridge({ sourceChain, destChain }: UseCompoundEVMB
         }));
       }
 
-      // Step 3: Approve xPOKT to Bridge Adapter
+      // Step 3: Approve xPOKT to Bridge Adapter (skip if sufficient allowance exists)
       setState(prev => ({ ...prev, step: 'approving-xpokt' }));
 
-      const xpoktApproveTx = await writeContractAsync({
-        address: contracts.xPOKT as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [contracts.bridgeAdapter as `0x${string}`, amountWei],
+      const xpoktApproval = await approveIfNeeded({
+        token: contracts.xPOKT as `0x${string}`,
+        spender: contracts.bridgeAdapter as `0x${string}`,
+        amount: amountWei,
+        owner: address as `0x${string}`,
+        chainId: sourceChainId,
+        writeContractAsync,
         chain: sourceChainObj,
       });
 
-      await waitForTransactionReceipt(wagmiConfig, {
-        hash: xpoktApproveTx,
-        chainId: sourceChainId,
-      });
-
-      setState(prev => ({
-        ...prev,
-        txHashes: { ...prev.txHashes, xpoktApprove: xpoktApproveTx }
-      }));
+      if (xpoktApproval.txHash) {
+        setState(prev => ({
+          ...prev,
+          txHashes: { ...prev.txHashes, xpoktApprove: xpoktApproval.txHash }
+        }));
+      }
 
       // Step 4: Quote exact relay fee then call bridge() immediately
       // bridgeCost() enforces strict msg.value equality, so query right before sending
