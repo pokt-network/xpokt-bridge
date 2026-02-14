@@ -10,6 +10,7 @@ import { WORMHOLE_TOKEN_BRIDGE_ABI } from '@/lib/contracts/abis/wormholeTokenBri
 import { wagmiConfig } from '@/lib/chains/config';
 import { useWormholeVAA } from './useWormholeVAA';
 import { PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddress } from '@solana/spl-token';
 
 const TOKEN_DECIMALS = 6;
 
@@ -55,7 +56,14 @@ export function useSolanaBridge() {
     if (!evmAddress) throw new Error('EVM wallet not connected');
 
     const amountWei = parseUnits(amount, TOKEN_DECIMALS);
-    const recipientBytes32 = solanaAddressToBytes32(solanaRecipientAddress);
+
+    // CRITICAL: Wormhole Token Bridge on Solana delivers tokens to an Associated
+    // Token Address (ATA), NOT a raw wallet address. We must derive the ATA from
+    // the recipient wallet + POKT mint, then encode that as the bytes32 recipient.
+    const recipientPubkey = new PublicKey(solanaRecipientAddress);
+    const poktMint = new PublicKey(CONTRACTS.solana.poktMint);
+    const recipientATA = await getAssociatedTokenAddress(poktMint, recipientPubkey);
+    const recipientBytes32 = solanaAddressToBytes32(recipientATA.toBase58());
 
     try {
       // Approve xPOKT to Wormhole Token Bridge
