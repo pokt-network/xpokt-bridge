@@ -85,6 +85,9 @@ const nextConfig = {
       ...(Array.isArray(config.externals) ? config.externals : []),
       'pino-pretty',
       'encoding',
+      // @metamask/sdk conditionally imports React Native AsyncStorage, which is
+      // unavailable in a web build. Marking it external prevents the bundle error.
+      '@react-native-async-storage/async-storage',
     ];
     return config;
   },
