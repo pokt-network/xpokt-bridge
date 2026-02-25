@@ -81,7 +81,7 @@ export function useWormholeVAA() {
         // Only available once emitter details are known from a prior indexer response.
         // Snapshot the ref into a local const so TypeScript can narrow it safely
         // inside the async .then() callback (refs are mutable, closures are not).
-        const emitter = emitterRef.current;
+        const emitter: EmitterDetails | null = emitterRef.current;
         const fallbackPromise: Promise<VAA | null> = emitter
           ? fetchVAABytes(
               emitter.chain,
