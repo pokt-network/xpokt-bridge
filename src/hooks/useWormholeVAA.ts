@@ -79,24 +79,22 @@ export function useWormholeVAA() {
         // Fallback: VAA store — a separate backend from the tx indexer.
         // Responds faster when the indexer is lagging but guardians have already signed.
         // Only available once emitter details are known from a prior indexer response.
-        // Snapshot the ref into a local const so TypeScript can narrow it safely
-        // inside the async .then() callback (refs are mutable, closures are not).
-        const emitter: EmitterDetails | null = emitterRef.current;
-        const fallbackPromise: Promise<VAA | null> = emitter
-          ? fetchVAABytes(
-              emitter.chain,
-              emitter.address,
-              emitter.sequence,
-            ).then((vaaBytes): VAA | null => {
+        // Snapshot ref fields into local variables before the async path.
+        // TypeScript narrows ternary conditions unreliably in some versions;
+        // if/else + destructuring guarantees the types are concrete primitives.
+        const emitterSnapshot = emitterRef.current;
+        let fallbackPromise: Promise<VAA | null>;
+        if (emitterSnapshot !== null) {
+          const { chain, address, sequence } = emitterSnapshot;
+          fallbackPromise = fetchVAABytes(chain, address, sequence).then(
+            (vaaBytes): VAA | null => {
               if (!vaaBytes) return null;
-              return {
-                vaaBytes,
-                emitterChain: emitter.chain,
-                emitterAddress: emitter.address,
-                sequence: emitter.sequence,
-              };
-            })
-          : Promise.resolve(null);
+              return { vaaBytes, emitterChain: chain, emitterAddress: address, sequence };
+            },
+          );
+        } else {
+          fallbackPromise = Promise.resolve(null);
+        }
 
         // Fire both in parallel; prefer primary, fall back to VAA store.
         const [primary, fallback] = await Promise.all([primaryPromise, fallbackPromise]);
