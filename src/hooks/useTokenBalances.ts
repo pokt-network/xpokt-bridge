@@ -160,10 +160,33 @@ export function useTokenBalances() {
     return () => clearInterval(interval);
   }, [fetchSolanaBalance]);
 
-  // Parse results from each chain's query independently
-  const wpoktBalance = ethData?.[0]?.result as bigint | undefined;
-  const xpoktEthBalance = ethData?.[1]?.result as bigint | undefined;
-  const xpoktBaseBalance = baseData?.[0]?.result as bigint | undefined;
+  // ─── Stable settled balances ───────────────────────────────────────────────
+  // Live query results (ethData / baseData) update the moment a refetch starts
+  // returning new data — including spurious 0s from post-transaction RPC race
+  // conditions. These stable states only update when the fetch has fully settled
+  // (isFetching transitions false→true→false), so the displayed balance never
+  // flickers to 0 mid-flight.
+  const [stableWPOKT, setStableWPOKT] = useState<bigint | undefined>(undefined);
+  const [stableXPOKTEth, setStableXPOKTEth] = useState<bigint | undefined>(undefined);
+  const [stableXPOKTBase, setStableXPOKTBase] = useState<bigint | undefined>(undefined);
+
+  useEffect(() => {
+    if (!ethFetching && ethData) {
+      setStableWPOKT(ethData[0]?.result as bigint | undefined);
+      setStableXPOKTEth(ethData[1]?.result as bigint | undefined);
+    }
+  }, [ethFetching, ethData]);
+
+  useEffect(() => {
+    if (!baseFetching && baseData) {
+      setStableXPOKTBase(baseData[0]?.result as bigint | undefined);
+    }
+  }, [baseFetching, baseData]);
+
+  // Use settled values for all balance computations — never the raw live results.
+  const wpoktBalance = stableWPOKT;
+  const xpoktEthBalance = stableXPOKTEth;
+  const xpoktBaseBalance = stableXPOKTBase;
 
   // Format helper
   const formatBalance = useCallback((raw: bigint | undefined): TokenBalance => {

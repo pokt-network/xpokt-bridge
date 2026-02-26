@@ -12,15 +12,16 @@ export function AmountInput() {
 
   const balance = getBalanceForChain(sourceChain);
 
-  // Show a skeleton whenever:
-  // - The very first fetch is in progress (isLoading), OR
-  // - A background refetch is running AND the current cached value is 0 (likely a
-  //   post-transaction RPC race condition, not a genuine zero balance).
+  // Show skeleton during the initial load, or as a safety net if a background
+  // refetch is still in-flight while the settled balance reads 0 (belt-and-suspenders
+  // guard on top of the stable-balance architecture in useTokenBalances).
   const showBalanceSkeleton = isLoading || (isFetching && balance.raw === 0n);
 
-  // Never flag "Insufficient balance" while we're still resolving the balance —
-  // a refetch right after a transaction can momentarily return 0 before the RPC settles.
-  const isInsufficientBalance = !showBalanceSkeleton && state.amount && parseFloat(state.amount) > parseFloat(balance.formatted);
+  // Don't flag insufficient balance while the skeleton is showing.
+  const isInsufficientBalance =
+    !showBalanceSkeleton &&
+    !!state.amount &&
+    parseFloat(state.amount) > parseFloat(balance.formatted);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const sanitized = sanitizeAmountInput(e.target.value);

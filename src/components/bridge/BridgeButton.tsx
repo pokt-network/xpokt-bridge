@@ -43,14 +43,17 @@ export function BridgeButton({ onBridge, isProcessing = false }: BridgeButtonPro
     buttonText = 'Connect Solana Wallet';
     disabled = false;
     onClick = () => setSolanaModalVisible(true);
+  } else if (isProcessing) {
+    // isProcessing must be checked before amount/balance — a bridge in flight
+    // should always show "Bridging..." regardless of the current displayed balance
+    // (which can transiently read 0 immediately after a transaction confirms).
+    buttonText = 'Bridging...';
+    disabled = true;
   } else if (!state.amount || parseFloat(state.amount) === 0) {
     buttonText = 'Enter Amount';
     disabled = true;
   } else if (parseFloat(state.amount) > parseFloat(balance.formatted)) {
     buttonText = 'Insufficient Balance';
-    disabled = true;
-  } else if (isProcessing) {
-    buttonText = 'Bridging...';
     disabled = true;
   } else {
     buttonText = `Bridge to ${chainNames[destChain]}`;
