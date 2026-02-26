@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { keepPreviousData } from '@tanstack/react-query';
 import { useAccount, useReadContracts, useChainId } from 'wagmi';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { getAssociatedTokenAddress, getAccount, TokenAccountNotFoundError } from '@solana/spl-token';
@@ -77,6 +78,7 @@ export function useTokenBalances() {
     query: {
       enabled: !!evmAddress,
       refetchInterval: 30000, // Refresh every 30 seconds
+      placeholderData: keepPreviousData, // Keep last known balance visible during refetch
     },
   });
 
