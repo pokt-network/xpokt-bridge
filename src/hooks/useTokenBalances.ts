@@ -42,15 +42,14 @@ export function useTokenBalances() {
   const [solanaLoading, setSolanaLoading] = useState(false);
   const [solanaError, setSolanaError] = useState<string | null>(null);
 
-  // EVM balances via multicall (reads from both Ethereum and Base in parallel)
+  // Ethereum balances (wPOKT + xPOKT) — separate query so a Base RPC failure
+  // can never zero out Ethereum balances, and vice versa.
   const {
-    data: evmData,
-    isLoading: evmLoading,
-    error: evmError,
-    refetch: refetchEvm,
+    data: ethData,
+    isLoading: ethLoading,
+    refetch: refetchEth,
   } = useReadContracts({
     contracts: [
-      // Ethereum wPOKT
       {
         address: CONTRACTS.ethereum.wPOKT as `0x${string}`,
         abi: ERC20_ABI,
@@ -58,7 +57,6 @@ export function useTokenBalances() {
         args: [evmAddress!],
         chainId: 1,
       },
-      // Ethereum xPOKT
       {
         address: CONTRACTS.ethereum.xPOKT as `0x${string}`,
         abi: ERC20_ABI,
@@ -66,7 +64,21 @@ export function useTokenBalances() {
         args: [evmAddress!],
         chainId: 1,
       },
-      // Base xPOKT
+    ],
+    query: {
+      enabled: !!evmAddress,
+      refetchInterval: 30000,
+      placeholderData: keepPreviousData,
+    },
+  });
+
+  // Base balances (xPOKT only) — isolated from the Ethereum query.
+  const {
+    data: baseData,
+    isLoading: baseLoading,
+    refetch: refetchBase,
+  } = useReadContracts({
+    contracts: [
       {
         address: CONTRACTS.base.xPOKT as `0x${string}`,
         abi: ERC20_ABI,
@@ -77,8 +89,8 @@ export function useTokenBalances() {
     ],
     query: {
       enabled: !!evmAddress,
-      refetchInterval: 30000, // Refresh every 30 seconds
-      placeholderData: keepPreviousData, // Keep last known balance visible during refetch
+      refetchInterval: 30000,
+      placeholderData: keepPreviousData,
     },
   });
 
@@ -141,10 +153,10 @@ export function useTokenBalances() {
     return () => clearInterval(interval);
   }, [fetchSolanaBalance]);
 
-  // Parse EVM results
-  const wpoktBalance = evmData?.[0]?.result as bigint | undefined;
-  const xpoktEthBalance = evmData?.[1]?.result as bigint | undefined;
-  const xpoktBaseBalance = evmData?.[2]?.result as bigint | undefined;
+  // Parse results from each chain's query independently
+  const wpoktBalance = ethData?.[0]?.result as bigint | undefined;
+  const xpoktEthBalance = ethData?.[1]?.result as bigint | undefined;
+  const xpoktBaseBalance = baseData?.[0]?.result as bigint | undefined;
 
   // Format helper
   const formatBalance = useCallback((raw: bigint | undefined): TokenBalance => {
@@ -200,10 +212,11 @@ export function useTokenBalances() {
   // Combined refetch function
   const refetch = useCallback(async () => {
     await Promise.all([
-      refetchEvm(),
+      refetchEth(),
+      refetchBase(),
       fetchSolanaBalance(),
     ]);
-  }, [refetchEvm, fetchSolanaBalance]);
+  }, [refetchEth, refetchBase, fetchSolanaBalance]);
 
   return {
     // Individual balances
@@ -214,10 +227,10 @@ export function useTokenBalances() {
     hasWPOKT,
 
     // Loading/error states
-    isLoading: evmLoading || solanaLoading,
-    evmLoading,
+    isLoading: ethLoading || baseLoading || solanaLoading,
+    evmLoading: ethLoading || baseLoading,
     solanaLoading,
-    error: evmError?.message || solanaError,
+    error: solanaError, // EVM query errors are transient RPC issues; keepPreviousData handles display
 
     // Refetch function
     refetch,
