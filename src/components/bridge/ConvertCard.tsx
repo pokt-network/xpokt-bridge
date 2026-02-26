@@ -12,7 +12,7 @@ export function ConvertCard() {
   const [direction, setDirection] = useState<'deposit' | 'withdraw'>('deposit');
   const [amount, setAmount] = useState('');
   const { state: lockboxState, deposit, withdraw, reset } = useLockbox();
-  const { balances } = useTokenBalances();
+  const { balances, refetch } = useTokenBalances();
 
   const sourceToken = direction === 'deposit' ? 'wPOKT' : 'POKT (xPOKT)';
   const destToken = direction === 'deposit' ? 'POKT (xPOKT)' : 'wPOKT';
@@ -28,6 +28,7 @@ export function ConvertCard() {
         await withdraw(amountWei);
       }
       setAmount('');
+      await refetch();
     } catch (e) {
       // Error handled by hook
     }
