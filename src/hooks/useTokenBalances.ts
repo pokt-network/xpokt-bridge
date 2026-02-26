@@ -47,6 +47,7 @@ export function useTokenBalances() {
   const {
     data: ethData,
     isLoading: ethLoading,
+    isFetching: ethFetching,
     refetch: refetchEth,
   } = useReadContracts({
     contracts: [
@@ -69,6 +70,10 @@ export function useTokenBalances() {
       enabled: !!evmAddress,
       refetchInterval: 30000,
       placeholderData: keepPreviousData,
+      // Wallet interactions (MetaMask popup open/close) trigger window focus events.
+      // Refetching immediately on focus creates a race condition where the RPC
+      // hasn't settled post-transaction state yet and briefly returns 0.
+      refetchOnWindowFocus: false,
     },
   });
 
@@ -76,6 +81,7 @@ export function useTokenBalances() {
   const {
     data: baseData,
     isLoading: baseLoading,
+    isFetching: baseFetching,
     refetch: refetchBase,
   } = useReadContracts({
     contracts: [
@@ -91,6 +97,7 @@ export function useTokenBalances() {
       enabled: !!evmAddress,
       refetchInterval: 30000,
       placeholderData: keepPreviousData,
+      refetchOnWindowFocus: false,
     },
   });
 
@@ -228,6 +235,10 @@ export function useTokenBalances() {
 
     // Loading/error states
     isLoading: ethLoading || baseLoading || solanaLoading,
+    // isFetching is true during ANY background refetch (unlike isLoading which is first-fetch only).
+    // Components can use this to avoid showing alarms (e.g. "Insufficient balance") while
+    // a refetch is in-flight and the cached value may temporarily read as 0.
+    isFetching: ethFetching || baseFetching,
     evmLoading: ethLoading || baseLoading,
     solanaLoading,
     error: solanaError, // EVM query errors are transient RPC issues; keepPreviousData handles display

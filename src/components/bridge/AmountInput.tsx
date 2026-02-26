@@ -8,10 +8,19 @@ import { formatNumber } from '@/lib/utils/format';
 
 export function AmountInput() {
   const { state, setAmount, sourceChain } = useBridgeContext();
-  const { getBalanceForChain, isLoading } = useTokenBalances();
+  const { getBalanceForChain, isLoading, isFetching } = useTokenBalances();
 
   const balance = getBalanceForChain(sourceChain);
-  const isInsufficientBalance = state.amount && parseFloat(state.amount) > parseFloat(balance.formatted);
+
+  // Show a skeleton whenever:
+  // - The very first fetch is in progress (isLoading), OR
+  // - A background refetch is running AND the current cached value is 0 (likely a
+  //   post-transaction RPC race condition, not a genuine zero balance).
+  const showBalanceSkeleton = isLoading || (isFetching && balance.raw === 0n);
+
+  // Never flag "Insufficient balance" while we're still resolving the balance —
+  // a refetch right after a transaction can momentarily return 0 before the RPC settles.
+  const isInsufficientBalance = !showBalanceSkeleton && state.amount && parseFloat(state.amount) > parseFloat(balance.formatted);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const sanitized = sanitizeAmountInput(e.target.value);
@@ -39,7 +48,7 @@ export function AmountInput() {
         </span>
         <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
           Balance:{' '}
-          {isLoading ? (
+          {showBalanceSkeleton ? (
             <span className="skeleton" style={{ display: 'inline-block', width: 64, height: 12, borderRadius: 4 }} />
           ) : (
             <span
