@@ -140,7 +140,7 @@ export function useSolanaBridge() {
     setState(prev => ({ ...prev, step: 'completing' }));
 
     try {
-      const wh = await getWormholeContext(connection.rpcEndpoint);
+      const wh = await getWormholeContext();
       const solanaChain = wh.getChain('Solana');
 
       // Get the TokenBridge protocol for Solana

@@ -59,7 +59,7 @@ export function useSolanaToEthBridge() {
       setState({ step: 'initiating', error: null });
 
       // Initialize Wormhole SDK with the app's Solana RPC endpoint
-      const wh = await getWormholeContext(connection.rpcEndpoint);
+      const wh = await getWormholeContext();
 
       // Build source (Solana) and destination (Ethereum) chain addresses
       const from = Wormhole.chainAddress('Solana', solanaSenderAddress);
