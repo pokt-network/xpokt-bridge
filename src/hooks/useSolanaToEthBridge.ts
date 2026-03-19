@@ -70,10 +70,13 @@ export function useSolanaToEthBridge() {
       // burn the wrapped asset on Solana (not attempt a native lock).
       const token = Wormhole.chainAddress('Ethereum', CONTRACTS.ethereum.xPOKT);
 
-      // Create a TokenTransfer using the standard Token Bridge protocol
+      // Create a TokenTransfer using the standard Token Bridge protocol.
+      // Wormhole SDK types require `bigint` but the underlying Solana Token Bridge
+      // serialisation goes through Anchor → BN.js v4 which chokes on native BigInt.
+      // Passing the value as a string at runtime avoids BN.js while satisfying types via cast.
       const xfer = await wh.tokenTransfer(
         token,
-        amount,
+        amount.toString() as unknown as bigint,
         from,
         to,
         'TokenBridge',

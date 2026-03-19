@@ -5,7 +5,7 @@ import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
+import { SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { wagmiConfig } from '@/lib/chains/config';
 import { BridgeProvider } from '@/context/BridgeContext';
 
@@ -133,11 +133,10 @@ interface WalletProvidersProps {
 }
 
 export function WalletProviders({ children }: WalletProvidersProps) {
+  // Phantom auto-registers as a Standard Wallet — no explicit adapter needed.
+  // Solflare still requires its adapter.
   const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-    ],
+    () => [new SolflareWalletAdapter()],
     []
   );
 
