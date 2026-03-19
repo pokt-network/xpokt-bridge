@@ -1,3 +1,6 @@
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // ---------------------------------------------------------------------------
@@ -80,6 +83,15 @@ const nextConfig = {
         crypto: false,
       };
     }
+    // Force all bn.js imports to resolve to v5 (the root copy).
+    // Several transitive deps (elliptic, asn1.js) bundle bn.js v4 which
+    // cannot handle JS bigint values — its _initArray asserts on the
+    // missing .length property.  The Wormhole SDK passes bigint amounts
+    // through Anchor → BN.js, so every copy must be v5+.
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'bn.js': require.resolve('bn.js'),
+    };
     // Handle optional peer dependencies that aren't installed
     config.externals = [
       ...(Array.isArray(config.externals) ? config.externals : []),
