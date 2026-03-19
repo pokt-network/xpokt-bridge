@@ -38,7 +38,10 @@ export function useTokenBalances() {
   const { publicKey: solanaPublicKey } = useWallet();
   const { connection } = useConnection();
 
-  const [solanaBalance, setSolanaBalance] = useState<bigint>(0n);
+  // Raw Solana balance from the latest fetch attempt (may transiently be 0
+  // during RPC hiccups). The UI reads from `stableSolanaBalance` instead.
+  const [solanaBalanceRaw, setSolanaBalanceRaw] = useState<bigint>(0n);
+  const [solanaFetching, setSolanaFetching] = useState(false);
   const [solanaLoading, setSolanaLoading] = useState(false);
   const [solanaError, setSolanaError] = useState<string | null>(null);
 
@@ -104,40 +107,29 @@ export function useTokenBalances() {
   // Solana balance (separate effect since it's not EVM)
   const fetchSolanaBalance = useCallback(async () => {
     if (!solanaPublicKey || !connection) {
-      setSolanaBalance(0n);
+      setSolanaBalanceRaw(0n);
       return;
     }
 
-    setSolanaLoading(true);
+    setSolanaFetching(true);
     setSolanaError(null);
 
     try {
       const mint = new PublicKey(CONTRACTS.solana.poktMint);
       const ata = await getAssociatedTokenAddress(mint, solanaPublicKey);
 
-      console.log('[useTokenBalances] Fetching Solana POKT balance...', {
-        wallet: solanaPublicKey.toBase58(),
-        mint: CONTRACTS.solana.poktMint,
-        ata: ata.toBase58(),
-        rpc: connection.rpcEndpoint,
-      });
-
       try {
         const account = await getAccount(connection, ata);
         const balance = BigInt(account.amount.toString());
-        console.log('[useTokenBalances] Solana POKT balance:', balance.toString());
-        setSolanaBalance(balance);
+        setSolanaBalanceRaw(balance);
       } catch (error: any) {
         // TokenAccountNotFoundError means the account doesn't exist yet (balance = 0)
-        // Also handle the case where the error name matches but isn't an instance
-        // (can happen with different module versions)
         if (
           error instanceof TokenAccountNotFoundError ||
           error?.name === 'TokenAccountNotFoundError' ||
           error?.message?.includes('could not find account')
         ) {
-          console.log('[useTokenBalances] Solana POKT token account not found (balance = 0)');
-          setSolanaBalance(0n);
+          setSolanaBalanceRaw(0n);
         } else {
           throw error;
         }
@@ -145,8 +137,9 @@ export function useTokenBalances() {
     } catch (error: any) {
       console.error('[useTokenBalances] Error fetching Solana balance:', error);
       setSolanaError(error.message || 'Failed to fetch Solana balance');
-      setSolanaBalance(0n);
+      // Do NOT reset to 0n on error — keep the previous balance
     } finally {
+      setSolanaFetching(false);
       setSolanaLoading(false);
     }
   }, [solanaPublicKey, connection]);
@@ -161,14 +154,15 @@ export function useTokenBalances() {
   }, [fetchSolanaBalance]);
 
   // ─── Stable settled balances ───────────────────────────────────────────────
-  // Live query results (ethData / baseData) update the moment a refetch starts
-  // returning new data — including spurious 0s from post-transaction RPC race
-  // conditions. These stable states only update when the fetch has fully settled
-  // (isFetching transitions false→true→false), so the displayed balance never
-  // flickers to 0 mid-flight.
+  // Live query results (ethData / baseData / solanaBalanceRaw) update the moment
+  // a refetch starts returning new data — including spurious 0s from
+  // post-transaction RPC race conditions. These stable states only update when
+  // the fetch has fully settled (isFetching transitions false→true→false), so
+  // the displayed balance never flickers to 0 mid-flight.
   const [stableWPOKT, setStableWPOKT] = useState<bigint | undefined>(undefined);
   const [stableXPOKTEth, setStableXPOKTEth] = useState<bigint | undefined>(undefined);
   const [stableXPOKTBase, setStableXPOKTBase] = useState<bigint | undefined>(undefined);
+  const [stableSolanaBalance, setStableSolanaBalance] = useState<bigint>(0n);
 
   useEffect(() => {
     if (!ethFetching && ethData) {
@@ -183,10 +177,20 @@ export function useTokenBalances() {
     }
   }, [baseFetching, baseData]);
 
+  // Solana: only promote the raw balance to stable when not mid-fetch.
+  // On RPC errors, solanaBalanceRaw is NOT reset to 0, so the last known
+  // good value persists automatically.
+  useEffect(() => {
+    if (!solanaFetching) {
+      setStableSolanaBalance(solanaBalanceRaw);
+    }
+  }, [solanaFetching, solanaBalanceRaw]);
+
   // Use settled values for all balance computations — never the raw live results.
   const wpoktBalance = stableWPOKT;
   const xpoktEthBalance = stableXPOKTEth;
   const xpoktBaseBalance = stableXPOKTBase;
+  const solanaBalance = stableSolanaBalance;
 
   // Format helper
   const formatBalance = useCallback((raw: bigint | undefined): TokenBalance => {
@@ -261,7 +265,7 @@ export function useTokenBalances() {
     // isFetching is true during ANY background refetch (unlike isLoading which is first-fetch only).
     // Components can use this to avoid showing alarms (e.g. "Insufficient balance") while
     // a refetch is in-flight and the cached value may temporarily read as 0.
-    isFetching: ethFetching || baseFetching,
+    isFetching: ethFetching || baseFetching || solanaFetching,
     evmLoading: ethLoading || baseLoading,
     solanaLoading,
     error: solanaError, // EVM query errors are transient RPC issues; keepPreviousData handles display
