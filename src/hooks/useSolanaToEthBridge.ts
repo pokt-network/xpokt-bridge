@@ -65,8 +65,10 @@ export function useSolanaToEthBridge() {
       const from = Wormhole.chainAddress('Solana', solanaSenderAddress);
       const to = Wormhole.chainAddress('Ethereum', ethRecipientAddress);
 
-      // The POKT token on Solana (Wormhole-wrapped xPOKT)
-      const token = Wormhole.chainAddress('Solana', CONTRACTS.solana.poktMint);
+      // POKT on Solana is a Wormhole-wrapped version of xPOKT from Ethereum.
+      // We must reference the ORIGINAL Ethereum token so the SDK knows to
+      // burn the wrapped asset on Solana (not attempt a native lock).
+      const token = Wormhole.chainAddress('Ethereum', CONTRACTS.ethereum.xPOKT);
 
       // Create a TokenTransfer using the standard Token Bridge protocol
       const xfer = await wh.tokenTransfer(
