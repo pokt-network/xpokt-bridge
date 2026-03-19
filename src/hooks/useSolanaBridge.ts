@@ -4,15 +4,31 @@ import { useState, useCallback } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { parseUnits } from 'viem';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
+import { PublicKey, Transaction, type VersionedTransaction } from '@solana/web3.js';
+import { getAssociatedTokenAddress } from '@solana/spl-token';
+import { wormhole, Wormhole } from '@wormhole-foundation/sdk';
+import type {
+  Network,
+  Chain,
+  SignAndSendSigner,
+  UnsignedTransaction,
+} from '@wormhole-foundation/sdk';
+import type { SolanaUnsignedTransaction } from '@wormhole-foundation/sdk-solana';
 import { CONTRACTS } from '@/lib/contracts/addresses';
 import { ERC20_ABI } from '@/lib/contracts/abis/erc20';
 import { WORMHOLE_TOKEN_BRIDGE_ABI } from '@/lib/contracts/abis/wormholeTokenBridge';
 import { wagmiConfig } from '@/lib/chains/config';
 import { useWormholeVAA } from './useWormholeVAA';
-import { PublicKey } from '@solana/web3.js';
-import { getAssociatedTokenAddress } from '@solana/spl-token';
 
 const TOKEN_DECIMALS = 6;
+
+function solanaAddressToBytes32(solanaAddress: string): `0x${string}` {
+  const pubkey = new PublicKey(solanaAddress);
+  const bytes = pubkey.toBytes();
+  const hex = Buffer.from(bytes).toString('hex').padStart(64, '0');
+  return `0x${hex}` as `0x${string}`;
+}
 
 export type SolanaBridgeStep =
   | 'idle'
@@ -31,16 +47,68 @@ interface SolanaBridgeState {
   error: string | null;
 }
 
-function solanaAddressToBytes32(solanaAddress: string): `0x${string}` {
-  const pubkey = new PublicKey(solanaAddress);
-  const bytes = pubkey.toBytes();
-  const hex = Buffer.from(bytes).toString('hex').padStart(64, '0');
-  return `0x${hex}` as `0x${string}`;
+/**
+ * Adapter that wraps the Solana wallet adapter into a Wormhole SDK SignAndSendSigner.
+ */
+class SolanaWalletSigner<N extends Network, C extends Chain> implements SignAndSendSigner<N, C> {
+  constructor(
+    private _chain: C,
+    private _address: string,
+    private _signTransaction: (tx: Transaction | VersionedTransaction) => Promise<Transaction | VersionedTransaction>,
+    private _connection: { sendRawTransaction: (raw: Buffer | Uint8Array) => Promise<string>; confirmTransaction: (...args: any[]) => Promise<any>; getLatestBlockhash: () => Promise<{ blockhash: string; lastValidBlockHeight: number }> },
+  ) {}
+
+  chain(): C { return this._chain; }
+  address(): string { return this._address; }
+
+  async signAndSend(txs: UnsignedTransaction<N, C>[]): Promise<string[]> {
+    const hashes: string[] = [];
+    const { blockhash, lastValidBlockHeight } = await this._connection.getLatestBlockhash();
+
+    for (const utx of txs) {
+      const solanaUtx = utx as unknown as SolanaUnsignedTransaction<N>;
+      const solTx = solanaUtx.transaction;
+      const tx = solTx.transaction as Transaction;
+
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = new PublicKey(this._address);
+
+      if (solTx.signers?.length) {
+        tx.partialSign(...solTx.signers);
+      }
+
+      const signed = await this._signTransaction(tx);
+      const serialized = (signed as Transaction).serialize();
+      const sig = await this._connection.sendRawTransaction(serialized);
+      await this._connection.confirmTransaction(
+        { signature: sig, blockhash, lastValidBlockHeight },
+        'confirmed',
+      );
+      hashes.push(sig);
+    }
+
+    return hashes;
+  }
+}
+
+/** Lazily initialize and cache the Wormhole SDK context */
+let whPromise: Promise<Wormhole<'Mainnet'>> | null = null;
+async function getWormholeContext(): Promise<Wormhole<'Mainnet'>> {
+  if (!whPromise) {
+    whPromise = (async () => {
+      const solana = (await import('@wormhole-foundation/sdk/solana')).default;
+      const evm = (await import('@wormhole-foundation/sdk/evm')).default;
+      return wormhole('Mainnet', [solana, evm]);
+    })();
+  }
+  return whPromise;
 }
 
 export function useSolanaBridge() {
   const { address: evmAddress } = useAccount();
   const { writeContractAsync } = useWriteContract();
+  const { publicKey: solanaPublicKey, signTransaction } = useWallet();
+  const { connection } = useConnection();
   const vaaHook = useWormholeVAA();
 
   const [state, setState] = useState<SolanaBridgeState>({
@@ -48,6 +116,10 @@ export function useSolanaBridge() {
     error: null,
   });
 
+  /**
+   * ETH → Solana: Lock xPOKT on Ethereum via Wormhole Token Bridge.
+   * This uses direct wagmi contract calls (no Wormhole SDK needed for EVM side).
+   */
   const initiateTransfer = useCallback(async (
     amount: string,
     evmSenderAddress: string,
@@ -57,9 +129,7 @@ export function useSolanaBridge() {
 
     const amountWei = parseUnits(amount, TOKEN_DECIMALS);
 
-    // CRITICAL: Wormhole Token Bridge on Solana delivers tokens to an Associated
-    // Token Address (ATA), NOT a raw wallet address. We must derive the ATA from
-    // the recipient wallet + POKT mint, then encode that as the bytes32 recipient.
+    // Derive the ATA for the recipient on Solana
     const recipientPubkey = new PublicKey(solanaRecipientAddress);
     const poktMint = new PublicKey(CONTRACTS.solana.poktMint);
     const recipientATA = await getAssociatedTokenAddress(poktMint, recipientPubkey);
@@ -116,13 +186,68 @@ export function useSolanaBridge() {
     return vaa;
   }, [vaaHook]);
 
+  /**
+   * Complete the ETH → Solana transfer by redeeming the VAA on Solana.
+   * This mints the wrapped POKT SPL tokens to the recipient's ATA.
+   *
+   * Uses the Wormhole SDK to build the Solana redeem transaction,
+   * then signs it with the user's Solana wallet.
+   */
   const completeTransfer = useCallback(async (vaaBytes: string) => {
+    if (!solanaPublicKey || !signTransaction) {
+      throw new Error('Solana wallet not connected');
+    }
+
     setState(prev => ({ ...prev, step: 'completing' }));
-    // Note: In production, this would use the Solana wallet to submit
-    // the VAA redemption transaction. For now, store as complete.
-    setState(prev => ({ ...prev, step: 'complete' }));
-    return vaaBytes;
-  }, []);
+
+    try {
+      const wh = await getWormholeContext();
+      const solanaChain = wh.getChain('Solana');
+
+      // Get the TokenBridge protocol for Solana
+      const tb = await solanaChain.getTokenBridge();
+
+      // Decode VAA bytes
+      const vaaData = Uint8Array.from(
+        Buffer.from(vaaBytes.startsWith('0x') ? vaaBytes.slice(2) : vaaBytes, 'hex')
+      );
+
+      // Parse the VAA using the SDK
+      const { deserialize } = await import('@wormhole-foundation/sdk');
+      const vaa = deserialize('TokenBridge:Transfer', vaaData);
+
+      // Build the redeem transactions
+      const senderAddress = Wormhole.parseAddress(
+        'Solana',
+        solanaPublicKey.toBase58(),
+      );
+
+      const redeemTxs = tb.redeem(senderAddress, vaa);
+
+      // Create signer adapter
+      const signer = new SolanaWalletSigner<'Mainnet', 'Solana'>(
+        'Solana',
+        solanaPublicKey.toBase58(),
+        signTransaction,
+        connection,
+      );
+
+      // Sign and send each transaction
+      const txList: UnsignedTransaction<'Mainnet', 'Solana'>[] = [];
+      for await (const tx of redeemTxs) {
+        txList.push(tx);
+      }
+
+      const hashes = await signer.signAndSend(txList);
+      const completeTxHash = hashes[hashes.length - 1] ?? '';
+
+      setState(prev => ({ ...prev, step: 'complete', completeTxHash }));
+      return completeTxHash;
+    } catch (error: any) {
+      setState(prev => ({ ...prev, step: 'error', error: error.message }));
+      throw error;
+    }
+  }, [solanaPublicKey, signTransaction, connection]);
 
   const resumeFromVAA = useCallback(async (sourceTxHash: string) => {
     setState(prev => ({ ...prev, step: 'waiting-vaa', initiateTxHash: sourceTxHash, error: null }));

@@ -1,6 +1,9 @@
 'use client';
 
+import { useCallback } from 'react';
 import { useBridgeContext } from '@/context/BridgeContext';
+import { useUnifiedSolanaBridge } from '@/hooks/useUnifiedSolanaBridge';
+import { useCompoundSolanaBridge } from '@/hooks/useCompoundSolanaBridge';
 import type { StoredTransaction, TxStatus } from '@/types/transactions';
 
 // ============================================================================
@@ -37,6 +40,28 @@ export function PendingBadge() {
 
 export function PendingTransactionsModal() {
   const { state, dispatch } = useBridgeContext();
+  const unifiedSolana = useUnifiedSolanaBridge({ direction: 'fromSolana' });
+  const compoundSolana = useCompoundSolanaBridge();
+
+  const handleResume = useCallback(async (tx: StoredTransaction) => {
+    if (!tx.sourceTxHash) return;
+
+    dispatch({ type: 'UPDATE_PENDING_TX', payload: { id: tx.id, updates: { status: 'waiting-vaa' } } });
+    dispatch({ type: 'TOGGLE_PENDING_MODAL', payload: false });
+
+    try {
+      if (tx.destChain === 'solana') {
+        // ETH → Solana: resume via compound Solana bridge
+        await compoundSolana.resumeFromVAA(tx.sourceTxHash);
+      } else if (tx.sourceChain === 'solana') {
+        // Solana → ETH: resume via unified Solana bridge
+        await unifiedSolana.resumeFromVAA(tx.sourceTxHash, 'Solana');
+      }
+    } catch (error: any) {
+      console.error('[PendingTx] Resume failed:', error);
+      dispatch({ type: 'UPDATE_PENDING_TX', payload: { id: tx.id, updates: { status: 'error' } } });
+    }
+  }, [dispatch, compoundSolana, unifiedSolana]);
 
   if (!state.showPendingModal) return null;
 
@@ -97,6 +122,7 @@ export function PendingTransactionsModal() {
                         key={tx.id}
                         tx={tx}
                         onDismiss={() => remove(tx.id)}
+                        onResume={() => handleResume(tx)}
                       />
                     ))}
                   </div>
@@ -115,6 +141,7 @@ export function PendingTransactionsModal() {
                         key={tx.id}
                         tx={tx}
                         onDismiss={() => remove(tx.id)}
+                        onResume={() => handleResume(tx)}
                       />
                     ))}
                   </div>
@@ -153,9 +180,11 @@ const statusConfig: Record<TxStatus, { label: string; color: string }> = {
 function TransactionItem({
   tx,
   onDismiss,
+  onResume,
 }: {
   tx: StoredTransaction;
   onDismiss: () => void;
+  onResume: () => void;
 }) {
   const config = statusConfig[tx.status];
   const timeAgo = getTimeAgo(tx.createdAt);
@@ -216,7 +245,8 @@ function TransactionItem({
           {/* Resume button for Solana bridges waiting for VAA */}
           {isResumable && (
             <button
-              className="text-xs px-2 py-1 rounded-lg transition-colors"
+              onClick={onResume}
+              className="text-xs px-2 py-1 rounded-lg transition-colors hover:brightness-110"
               style={{
                 background: 'rgba(72, 229, 194, 0.15)',
                 color: '#48e5c2',
