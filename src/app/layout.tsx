@@ -8,9 +8,6 @@ const rubik = Rubik({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'POKT Multichain Bridge',
   description: 'Bridge POKT tokens between Ethereum, Base, and Solana',
-  icons: {
-    icon: '/favicon.png',
-  },
 };
 
 export default function RootLayout({

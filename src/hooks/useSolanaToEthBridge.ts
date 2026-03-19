@@ -65,18 +65,22 @@ export function useSolanaToEthBridge() {
       const from = Wormhole.chainAddress('Solana', solanaSenderAddress);
       const to = Wormhole.chainAddress('Ethereum', ethRecipientAddress);
 
-      // POKT on Solana is a Wormhole-wrapped version of xPOKT from Ethereum.
-      // We must reference the ORIGINAL Ethereum token so the SDK knows to
-      // burn the wrapped asset on Solana (not attempt a native lock).
-      const token = Wormhole.chainAddress('Ethereum', CONTRACTS.ethereum.xPOKT);
+      // Reference the SOLANA-SIDE wrapped mint, NOT the Ethereum xPOKT address.
+      // The Solana TokenBridge's transfer() converts this to a SolanaAddress
+      // via `new SolanaAddress(token).unwrap()`.  Passing an Ethereum
+      // NativeAddress here would fall through to `new PublicKey(evmAddrObj)`
+      // which triggers a BN.js _initArray assertion because EvmAddress
+      // objects have no .length property.
+      //
+      // The SDK's getOriginalAsset() automatically resolves the on-chain
+      // metadata to discover that this Solana mint is a wrapped version
+      // of xPOKT on Ethereum, so the Wormhole message is correct.
+      const token = Wormhole.chainAddress('Solana', CONTRACTS.solana.poktMint);
 
-      // Create a TokenTransfer using the standard Token Bridge protocol.
-      // Wormhole SDK types require `bigint` but the underlying Solana Token Bridge
-      // serialisation goes through Anchor → BN.js v4 which chokes on native BigInt.
-      // Passing the value as a string at runtime avoids BN.js while satisfying types via cast.
+      // Create a TokenTransfer using the standard Token Bridge protocol
       const xfer = await wh.tokenTransfer(
         token,
-        amount.toString() as unknown as bigint,
+        amount,
         from,
         to,
         'TokenBridge',
