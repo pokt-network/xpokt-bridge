@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState, useEffect, type ReactNode } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
@@ -13,86 +13,119 @@ import '@solana/wallet-adapter-react-ui/styles.css';
 
 const queryClient = new QueryClient();
 
-// Pocket Network is the only Solana RPC. No third-party fallback.
-// Can be fully overridden via NEXT_PUBLIC_SOLANA_RPC_URL env var.
-const SOLANA_RPC = 'https://solana.api.pocket.network';
+/**
+ * Ordered list of Solana RPC endpoints.
+ * Pocket Network is primary. On error or >500ms latency, we advance to the next.
+ * All endpoints are public and require no API key.
+ */
+const SOLANA_RPC_ENDPOINTS = [
+  'https://solana.api.pocket.network',
+  'https://api.mainnet-beta.solana.com',
+  'https://solana-mainnet.rpc.extrnode.com',
+  'https://solana.blockrazor.xyz',
+];
+
+/** Max acceptable latency before we consider an endpoint too slow */
+const LATENCY_THRESHOLD_MS = 500;
 
 /**
- * Check if the Solana RPC endpoint is responsive. Retries up to
- * `maxRetries` times with exponential backoff before giving up.
+ * Probe a single RPC endpoint. Returns latency in ms on success, or -1 on failure.
  */
-async function checkRpcHealthWithRetry(
-  endpoint: string,
-  timeoutMs: number,
-  maxRetries: number,
-): Promise<boolean> {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+async function probeEndpoint(endpoint: string, timeoutMs: number): Promise<number> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const start = performance.now();
 
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'getBlockHeight',
-          params: [],
-        }),
-        signal: controller.signal,
-      });
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getBlockHeight',
+        params: [],
+      }),
+      signal: controller.signal,
+    });
 
-      clearTimeout(timer);
+    clearTimeout(timer);
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
+    if (!response.ok) return -1;
 
-      const data = await response.json();
-      if (typeof data?.result === 'number') {
-        return true;
-      }
-    } catch {
-      clearTimeout(timer);
-      if (attempt < maxRetries) {
-        // Exponential backoff: 500ms, 1000ms, 2000ms
-        await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
-      }
-    }
+    const data = await response.json();
+    if (typeof data?.result !== 'number') return -1;
+
+    return performance.now() - start;
+  } catch {
+    clearTimeout(timer);
+    return -1;
   }
-  return false;
 }
 
 /**
- * Hook to resolve the Solana RPC endpoint.
- * Always uses Pocket Network. Retries the health check up to 3 times
- * before settling (the ConnectionProvider still works with a potentially
- * slow endpoint — it just means the first few RPC calls may be slow).
+ * Hook to resolve the Solana RPC endpoint with automatic failover.
+ *
+ * Starts with Pocket Network. If the health-check fails or latency exceeds
+ * 500ms, advances to the next endpoint in order. The active endpoint is
+ * re-checked every 60s; if it degrades, we advance again.
  */
 function useSolanaRpcEndpoint(): string {
   const override = process.env.NEXT_PUBLIC_SOLANA_RPC_URL;
-  const endpoint = override || SOLANA_RPC;
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeIndexRef = useRef(0);
 
-  // Fire-and-forget health check with retries — purely for logging.
-  // The endpoint is always Pocket; we don't swap to anything else.
+  // Keep ref in sync for use inside async callbacks
+  useEffect(() => {
+    activeIndexRef.current = activeIndex;
+  }, [activeIndex]);
+
+  const advanceEndpoint = useCallback((fromIndex: number) => {
+    const next = fromIndex + 1;
+    if (next < SOLANA_RPC_ENDPOINTS.length) {
+      console.warn(
+        `[SolanaRPC] Advancing from ${SOLANA_RPC_ENDPOINTS[fromIndex]} → ${SOLANA_RPC_ENDPOINTS[next]}`
+      );
+      setActiveIndex(next);
+    } else {
+      console.warn('[SolanaRPC] All endpoints exhausted, staying on last:', SOLANA_RPC_ENDPOINTS[fromIndex]);
+    }
+  }, []);
+
+  // Initial probe + periodic re-check
   useEffect(() => {
     if (override) return;
 
     let cancelled = false;
-    (async () => {
-      const healthy = await checkRpcHealthWithRetry(endpoint, 2000, 2);
-      if (cancelled) return;
-      if (healthy) {
-        console.log('[SolanaRPC] Pocket Network healthy:', endpoint);
-      } else {
-        console.warn('[SolanaRPC] Pocket Network health check failed after retries — proceeding anyway');
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [override, endpoint]);
 
-  return endpoint;
+    async function check() {
+      const idx = activeIndexRef.current;
+      const endpoint = SOLANA_RPC_ENDPOINTS[idx];
+      const latency = await probeEndpoint(endpoint, 2000);
+
+      if (cancelled) return;
+
+      if (latency < 0) {
+        console.warn(`[SolanaRPC] ${endpoint} — health check failed`);
+        advanceEndpoint(idx);
+      } else if (latency > LATENCY_THRESHOLD_MS) {
+        console.warn(`[SolanaRPC] ${endpoint} — latency ${Math.round(latency)}ms exceeds ${LATENCY_THRESHOLD_MS}ms threshold`);
+        advanceEndpoint(idx);
+      } else {
+        console.log(`[SolanaRPC] ${endpoint} — healthy (${Math.round(latency)}ms)`);
+      }
+    }
+
+    check();
+    const interval = setInterval(check, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [override, activeIndex, advanceEndpoint]);
+
+  if (override) return override;
+  return SOLANA_RPC_ENDPOINTS[activeIndex];
 }
 
 interface WalletProvidersProps {
