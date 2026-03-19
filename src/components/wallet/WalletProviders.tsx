@@ -13,83 +13,84 @@ import '@solana/wallet-adapter-react-ui/styles.css';
 
 const queryClient = new QueryClient();
 
-// Solana RPC endpoints — priority order.
-// Pocket Network is primary; Ankr is fallback if Pocket doesn't respond within 1000ms.
+// Pocket Network is the only Solana RPC. No third-party fallback.
 // Can be fully overridden via NEXT_PUBLIC_SOLANA_RPC_URL env var.
-const SOLANA_RPC_PRIMARY = 'https://solana.api.pocket.network';
-const SOLANA_RPC_FALLBACK = 'https://rpc.ankr.com/solana';
-const RPC_HEALTH_TIMEOUT_MS = 1000;
+const SOLANA_RPC = 'https://solana.api.pocket.network';
 
 /**
- * Check if a Solana RPC endpoint is responsive by sending a lightweight
- * getBlockHeight request with an AbortController timeout.
+ * Check if the Solana RPC endpoint is responsive. Retries up to
+ * `maxRetries` times with exponential backoff before giving up.
  */
-async function checkRpcHealth(endpoint: string, timeoutMs: number): Promise<boolean> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+async function checkRpcHealthWithRetry(
+  endpoint: string,
+  timeoutMs: number,
+  maxRetries: number,
+): Promise<boolean> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getBlockHeight',
-        params: [],
-      }),
-      signal: controller.signal,
-    });
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getBlockHeight',
+          params: [],
+        }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) return false;
+      clearTimeout(timer);
 
-    const data = await response.json();
-    // Valid response has a numeric result
-    return typeof data?.result === 'number';
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timer);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (typeof data?.result === 'number') {
+        return true;
+      }
+    } catch {
+      clearTimeout(timer);
+      if (attempt < maxRetries) {
+        // Exponential backoff: 500ms, 1000ms, 2000ms
+        await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
+      }
+    }
   }
+  return false;
 }
 
 /**
- * Hook to resolve the best available Solana RPC endpoint.
- * Starts with the fallback immediately so providers are always available,
- * then upgrades to Pocket Network if the health check passes within 1000ms.
+ * Hook to resolve the Solana RPC endpoint.
+ * Always uses Pocket Network. Retries the health check up to 3 times
+ * before settling (the ConnectionProvider still works with a potentially
+ * slow endpoint — it just means the first few RPC calls may be slow).
  */
 function useSolanaRpcEndpoint(): string {
   const override = process.env.NEXT_PUBLIC_SOLANA_RPC_URL;
+  const endpoint = override || SOLANA_RPC;
 
-  // Start with fallback so Solana providers render immediately.
-  // If user set an override, use that from the start.
-  const [endpoint, setEndpoint] = useState<string>(override || SOLANA_RPC_FALLBACK);
-
+  // Fire-and-forget health check with retries — purely for logging.
+  // The endpoint is always Pocket; we don't swap to anything else.
   useEffect(() => {
-    // Skip health check if user provided an override
     if (override) return;
 
     let cancelled = false;
-
-    async function resolve() {
-      console.log('[SolanaRPC] Checking Pocket Network endpoint...');
-      const pocketHealthy = await checkRpcHealth(SOLANA_RPC_PRIMARY, RPC_HEALTH_TIMEOUT_MS);
-
+    (async () => {
+      const healthy = await checkRpcHealthWithRetry(endpoint, 2000, 2);
       if (cancelled) return;
-
-      if (pocketHealthy) {
-        console.log('[SolanaRPC] Using Pocket Network:', SOLANA_RPC_PRIMARY);
-        setEndpoint(SOLANA_RPC_PRIMARY);
+      if (healthy) {
+        console.log('[SolanaRPC] Pocket Network healthy:', endpoint);
       } else {
-        console.log('[SolanaRPC] Pocket Network unavailable, using Ankr:', SOLANA_RPC_FALLBACK);
-        // Already set as initial state, no-op
+        console.warn('[SolanaRPC] Pocket Network health check failed after retries — proceeding anyway');
       }
-    }
-
-    resolve();
-
+    })();
     return () => { cancelled = true; };
-  }, [override]);
+  }, [override, endpoint]);
 
   return endpoint;
 }

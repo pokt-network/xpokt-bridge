@@ -104,7 +104,9 @@ export function useTokenBalances() {
     },
   });
 
-  // Solana balance (separate effect since it's not EVM)
+  // Solana balance (separate effect since it's not EVM).
+  // Retries up to 2 times on transient RPC errors (Pocket timeouts)
+  // before keeping the previous balance.
   const fetchSolanaBalance = useCallback(async () => {
     if (!solanaPublicKey || !connection) {
       setSolanaBalanceRaw(0n);
@@ -114,14 +116,18 @@ export function useTokenBalances() {
     setSolanaFetching(true);
     setSolanaError(null);
 
-    try {
-      const mint = new PublicKey(CONTRACTS.solana.poktMint);
-      const ata = await getAssociatedTokenAddress(mint, solanaPublicKey);
+    const mint = new PublicKey(CONTRACTS.solana.poktMint);
+    const ata = await getAssociatedTokenAddress(mint, solanaPublicKey);
+    const MAX_RETRIES = 2;
 
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const account = await getAccount(connection, ata);
         const balance = BigInt(account.amount.toString());
         setSolanaBalanceRaw(balance);
+        setSolanaFetching(false);
+        setSolanaLoading(false);
+        return; // Success — exit early
       } catch (error: any) {
         // TokenAccountNotFoundError means the account doesn't exist yet (balance = 0)
         if (
@@ -130,18 +136,24 @@ export function useTokenBalances() {
           error?.message?.includes('could not find account')
         ) {
           setSolanaBalanceRaw(0n);
+          setSolanaFetching(false);
+          setSolanaLoading(false);
+          return; // Legitimate zero — exit early
+        }
+
+        // Transient error — retry after backoff
+        if (attempt < MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
         } else {
-          throw error;
+          // All retries exhausted — keep previous balance, log error
+          console.error('[useTokenBalances] Solana balance fetch failed after retries:', error);
+          setSolanaError(error.message || 'Failed to fetch Solana balance');
         }
       }
-    } catch (error: any) {
-      console.error('[useTokenBalances] Error fetching Solana balance:', error);
-      setSolanaError(error.message || 'Failed to fetch Solana balance');
-      // Do NOT reset to 0n on error — keep the previous balance
-    } finally {
-      setSolanaFetching(false);
-      setSolanaLoading(false);
     }
+
+    setSolanaFetching(false);
+    setSolanaLoading(false);
   }, [solanaPublicKey, connection]);
 
   // Fetch Solana balance on mount and when wallet changes
