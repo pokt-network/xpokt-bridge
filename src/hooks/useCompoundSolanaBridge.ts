@@ -211,6 +211,7 @@ export function useCompoundSolanaBridge() {
     state,
     solanaBridgeState: solanaBridge.state,
     bridge,
+    waitForVAA: solanaBridge.waitForVAA,
     completeTransfer,
     previewBridge,
     getBalances,

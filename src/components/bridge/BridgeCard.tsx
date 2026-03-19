@@ -304,9 +304,17 @@ function SolanaBridgeContent() {
           state.amount,
           solanaPublicKey.toBase58()
         );
-        // Transfer initiated — waiting for VAA
-        // completeTransfer will need to be called after VAA is ready
         console.log('[SolanaBridge] ETH→Solana initiated:', result);
+
+        // Poll for VAA, then claim on Solana
+        if (result?.sourceTxHash) {
+          const vaa = await compoundSolana.waitForVAA(result.sourceTxHash);
+          if (vaa?.vaaBytes) {
+            console.log('[SolanaBridge] VAA ready, claiming on Solana...');
+            await compoundSolana.completeTransfer(vaa.vaaBytes);
+            console.log('[SolanaBridge] ETH→Solana complete');
+          }
+        }
       } else {
         // Solana → ETH: use unified hook
         if (!evmAddress || !solanaPublicKey) return;
@@ -317,6 +325,20 @@ function SolanaBridgeContent() {
           evmAddress
         );
         console.log('[SolanaBridge] Solana→ETH initiated:', result);
+
+        // Poll for VAA, then claim on Ethereum
+        if (result?.sourceTxHash) {
+          const vaa = await unifiedSolana.waitForVAA(result.sourceTxHash);
+          if (vaa?.vaaBytes) {
+            console.log('[SolanaBridge] VAA ready, claiming on Ethereum...');
+            await unifiedSolana.completeTransferWithConversion(
+              vaa.vaaBytes,
+              state.destToken,
+              amountRaw,
+            );
+            console.log('[SolanaBridge] Solana→ETH complete');
+          }
+        }
       }
     } catch (error: any) {
       console.error('[SolanaBridge] Error:', error);
@@ -325,6 +347,7 @@ function SolanaBridgeContent() {
     }
   }, [
     state.amount,
+    state.destToken,
     isToSolana,
     evmAddress,
     solanaPublicKey,

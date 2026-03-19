@@ -115,18 +115,6 @@ export function useSolanaToEthBridge() {
   const waitForVAA = useCallback(async (sourceTxHash: string) => {
     setState(prev => ({ ...prev, step: 'waiting-vaa' }));
 
-    // If we have a TokenTransfer object, use SDK's attestation fetching
-    if (xferRef.current) {
-      try {
-        const attestIds = await xferRef.current.fetchAttestation(600_000); // 10 min timeout
-        // The attestation is now cached on the TokenTransfer object
-        return attestIds;
-      } catch {
-        // Fall back to manual VAA polling
-      }
-    }
-
-    // Fallback: use the manual VAA polling hook
     const vaa = await vaaHook.pollForVAA(sourceTxHash);
     if (!vaa) {
       setState(prev => ({ ...prev, step: 'error', error: 'VAA not found' }));

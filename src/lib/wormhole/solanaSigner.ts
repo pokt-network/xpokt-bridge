@@ -87,14 +87,68 @@ export class SolanaWalletSigner<N extends Network, C extends Chain>
         maxRetries: 5,
       });
 
-      // Wait for confirmation
-      await this._connection.confirmTransaction(
-        { signature: sig, blockhash, lastValidBlockHeight },
-        'confirmed',
-      );
+      // Wait for confirmation. If the blockhash expires before we get
+      // confirmation, the tx may still have landed — check explicitly
+      // before treating it as a failure.
+      try {
+        await this._connection.confirmTransaction(
+          { signature: sig, blockhash, lastValidBlockHeight },
+          'confirmed',
+        );
+      } catch (confirmError: any) {
+        const isExpired =
+          confirmError?.message?.includes('block height exceeded') ||
+          confirmError?.message?.includes('expired');
+
+        if (isExpired) {
+          // The blockhash expired before we got confirmation, but the
+          // tx may have landed anyway. Poll getSignatureStatuses to check.
+          const confirmed = await this.checkTxLanded(sig);
+          if (!confirmed) {
+            throw new Error(
+              `Transaction ${sig} was submitted but could not be confirmed. ` +
+              `It may still land — check Solscan before retrying.`
+            );
+          }
+          // tx DID land — continue normally
+        } else {
+          throw confirmError;
+        }
+      }
+
       hashes.push(sig);
     }
 
     return hashes;
+  }
+
+  /**
+   * Poll getSignatureStatuses to check whether a transaction actually
+   * confirmed on-chain, even though confirmTransaction timed out.
+   * Retries a few times with short delays since the RPC may lag behind.
+   */
+  private async checkTxLanded(sig: string): Promise<boolean> {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      try {
+        const { value } = await this._connection.getSignatureStatuses([sig]);
+        const status = value?.[0];
+        if (status) {
+          if (status.err) {
+            // Transaction landed but failed on-chain
+            throw new Error(`Transaction failed on-chain: ${JSON.stringify(status.err)}`);
+          }
+          if (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized') {
+            return true;
+          }
+        }
+      } catch (e: any) {
+        // If it's our own "failed on-chain" error, rethrow
+        if (e.message?.startsWith('Transaction failed on-chain')) throw e;
+        // Otherwise, RPC error — retry
+      }
+      // Wait 2 seconds between checks
+      await new Promise(r => setTimeout(r, 2000));
+    }
+    return false;
   }
 }
