@@ -7,7 +7,7 @@ import { parseUnits } from 'viem';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { PublicKey, Transaction, type VersionedTransaction } from '@solana/web3.js';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
-import { wormhole, Wormhole } from '@wormhole-foundation/sdk';
+import { Wormhole } from '@wormhole-foundation/sdk';
 import type {
   Network,
   Chain,
@@ -19,6 +19,7 @@ import { CONTRACTS } from '@/lib/contracts/addresses';
 import { ERC20_ABI } from '@/lib/contracts/abis/erc20';
 import { WORMHOLE_TOKEN_BRIDGE_ABI } from '@/lib/contracts/abis/wormholeTokenBridge';
 import { wagmiConfig } from '@/lib/chains/config';
+import { getWormholeContext } from '@/lib/wormhole/context';
 import { useWormholeVAA } from './useWormholeVAA';
 
 const TOKEN_DECIMALS = 6;
@@ -89,19 +90,6 @@ class SolanaWalletSigner<N extends Network, C extends Chain> implements SignAndS
 
     return hashes;
   }
-}
-
-/** Lazily initialize and cache the Wormhole SDK context */
-let whPromise: Promise<Wormhole<'Mainnet'>> | null = null;
-async function getWormholeContext(): Promise<Wormhole<'Mainnet'>> {
-  if (!whPromise) {
-    whPromise = (async () => {
-      const solana = (await import('@wormhole-foundation/sdk/solana')).default;
-      const evm = (await import('@wormhole-foundation/sdk/evm')).default;
-      return wormhole('Mainnet', [solana, evm]);
-    })();
-  }
-  return whPromise;
 }
 
 export function useSolanaBridge() {
@@ -201,7 +189,7 @@ export function useSolanaBridge() {
     setState(prev => ({ ...prev, step: 'completing' }));
 
     try {
-      const wh = await getWormholeContext();
+      const wh = await getWormholeContext(connection.rpcEndpoint);
       const solanaChain = wh.getChain('Solana');
 
       // Get the TokenBridge protocol for Solana

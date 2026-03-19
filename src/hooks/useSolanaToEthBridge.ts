@@ -5,7 +5,7 @@ import { useAccount, useWriteContract } from 'wagmi';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { PublicKey, Transaction, type VersionedTransaction } from '@solana/web3.js';
-import { wormhole, Wormhole, type TokenTransfer } from '@wormhole-foundation/sdk';
+import { Wormhole, type TokenTransfer } from '@wormhole-foundation/sdk';
 import type {
   Network,
   Chain,
@@ -16,6 +16,7 @@ import type { SolanaUnsignedTransaction } from '@wormhole-foundation/sdk-solana'
 import { CONTRACTS } from '@/lib/contracts/addresses';
 import { WORMHOLE_TOKEN_BRIDGE_ABI } from '@/lib/contracts/abis/wormholeTokenBridge';
 import { wagmiConfig } from '@/lib/chains/config';
+import { getWormholeContext } from '@/lib/wormhole/context';
 import { useWormholeVAA } from './useWormholeVAA';
 
 export type SolanaToEthBridgeStep =
@@ -85,22 +86,6 @@ class SolanaWalletSigner<N extends Network, C extends Chain> implements SignAndS
   }
 }
 
-/**
- * Lazily initializes and caches the Wormhole SDK context.
- * The SDK loads platform modules dynamically, so we only do this once.
- */
-let whPromise: Promise<Wormhole<'Mainnet'>> | null = null;
-async function getWormholeContext(): Promise<Wormhole<'Mainnet'>> {
-  if (!whPromise) {
-    whPromise = (async () => {
-      const solana = (await import('@wormhole-foundation/sdk/solana')).default;
-      const evm = (await import('@wormhole-foundation/sdk/evm')).default;
-      return wormhole('Mainnet', [solana, evm]);
-    })();
-  }
-  return whPromise;
-}
-
 export function useSolanaToEthBridge() {
   const vaaHook = useWormholeVAA();
   const { address: evmAddress } = useAccount();
@@ -132,8 +117,8 @@ export function useSolanaToEthBridge() {
     try {
       setState({ step: 'initiating', error: null });
 
-      // Initialize Wormhole SDK
-      const wh = await getWormholeContext();
+      // Initialize Wormhole SDK with the app's Solana RPC endpoint
+      const wh = await getWormholeContext(connection.rpcEndpoint);
 
       // Build source (Solana) and destination (Ethereum) chain addresses
       const from = Wormhole.chainAddress('Solana', solanaSenderAddress);
@@ -162,7 +147,12 @@ export function useSolanaToEthBridge() {
 
       // Initiate the transfer — this will prompt the user to sign the Solana transaction
       const txids = await xfer.initiateTransfer(signer);
-      const sourceTxHash = txids[txids.length - 1] ?? '';
+
+      if (!txids || txids.length === 0) {
+        throw new Error('No transaction was submitted. The Solana wallet may have rejected the request.');
+      }
+
+      const sourceTxHash = txids[txids.length - 1]!;
 
       setState(prev => ({
         ...prev,
