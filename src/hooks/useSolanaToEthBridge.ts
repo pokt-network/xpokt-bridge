@@ -4,19 +4,12 @@ import { useState, useCallback, useRef } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
-import { PublicKey, Transaction, type VersionedTransaction } from '@solana/web3.js';
 import { Wormhole, type TokenTransfer } from '@wormhole-foundation/sdk';
-import type {
-  Network,
-  Chain,
-  SignAndSendSigner,
-  UnsignedTransaction,
-} from '@wormhole-foundation/sdk';
-import type { SolanaUnsignedTransaction } from '@wormhole-foundation/sdk-solana';
 import { CONTRACTS } from '@/lib/contracts/addresses';
 import { WORMHOLE_TOKEN_BRIDGE_ABI } from '@/lib/contracts/abis/wormholeTokenBridge';
 import { wagmiConfig } from '@/lib/chains/config';
 import { getWormholeContext } from '@/lib/wormhole/context';
+import { SolanaWalletSigner } from '@/lib/wormhole/solanaSigner';
 import { useWormholeVAA } from './useWormholeVAA';
 
 export type SolanaToEthBridgeStep =
@@ -32,58 +25,6 @@ interface SolanaToEthBridgeState {
   initiateTxHash?: string;
   completeTxHash?: string;
   error: string | null;
-}
-
-/**
- * Adapter that wraps the Solana wallet adapter into a Wormhole SDK SignAndSendSigner.
- * This allows the Wormhole SDK to build Token Bridge transactions that the user signs
- * via their browser wallet (Phantom, Solflare, etc.).
- */
-class SolanaWalletSigner<N extends Network, C extends Chain> implements SignAndSendSigner<N, C> {
-  constructor(
-    private _chain: C,
-    private _address: string,
-    private _signTransaction: (tx: Transaction | VersionedTransaction) => Promise<Transaction | VersionedTransaction>,
-    private _connection: { sendRawTransaction: (raw: Buffer | Uint8Array) => Promise<string>; confirmTransaction: (...args: any[]) => Promise<any>; getLatestBlockhash: () => Promise<{ blockhash: string; lastValidBlockHeight: number }> },
-  ) {}
-
-  chain(): C { return this._chain; }
-  address(): string { return this._address; }
-
-  async signAndSend(txs: UnsignedTransaction<N, C>[]): Promise<string[]> {
-    const hashes: string[] = [];
-    const { blockhash, lastValidBlockHeight } = await this._connection.getLatestBlockhash();
-
-    for (const utx of txs) {
-      // Extract the Solana Transaction from the Wormhole UnsignedTransaction wrapper
-      const solanaUtx = utx as unknown as SolanaUnsignedTransaction<N>;
-      const solTx = solanaUtx.transaction;
-      const tx = solTx.transaction as Transaction;
-
-      // Set blockhash and fee payer
-      tx.recentBlockhash = blockhash;
-      tx.feePayer = new PublicKey(this._address);
-
-      // Sign with any additional signers (e.g., Wormhole message keypair)
-      if (solTx.signers?.length) {
-        tx.partialSign(...solTx.signers);
-      }
-
-      // Sign with user's wallet
-      const signed = await this._signTransaction(tx);
-      const serialized = (signed as Transaction).serialize();
-
-      // Send and confirm
-      const sig = await this._connection.sendRawTransaction(serialized);
-      await this._connection.confirmTransaction(
-        { signature: sig, blockhash, lastValidBlockHeight },
-        'confirmed',
-      );
-      hashes.push(sig);
-    }
-
-    return hashes;
-  }
 }
 
 export function useSolanaToEthBridge() {
