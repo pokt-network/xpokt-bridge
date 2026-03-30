@@ -5,12 +5,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useBridgeContext } from '@/context/BridgeContext';
 import { useTokenBalances } from '@/hooks/useTokenBalances';
-
-const chainNames: Record<string, string> = {
-  ethereum: 'Ethereum',
-  base: 'Base',
-  solana: 'Solana',
-};
+import { getChainName } from '@/lib/chains/chainRegistry';
 
 interface BridgeButtonProps {
   onBridge: () => void;
@@ -24,16 +19,20 @@ export function BridgeButton({ onBridge, isProcessing = false }: BridgeButtonPro
   const { state, sourceChain, destChain } = useBridgeContext();
   const { getBalanceForChain } = useTokenBalances();
 
-  const balance = getBalanceForChain(sourceChain);
+  const balance = sourceChain ? getBalanceForChain(sourceChain) : { raw: 0n, formatted: '0' };
   const isSolanaTab = state.activeTab === 'solana';
   const needsBothWallets = isSolanaTab;
+  const chainsSelected = sourceChain !== null && destChain !== null;
 
   // Determine button state and action
   let buttonText = '';
   let disabled = true;
   let onClick: () => void = () => {};
 
-  if (!isEvmConnected || !evmAddress) {
+  if (!chainsSelected) {
+    buttonText = 'Select Chains';
+    disabled = true;
+  } else if (!isEvmConnected || !evmAddress) {
     // EVM wallet not connected — but we can't trigger wagmi connect from here
     // without a connector reference, so show a prompt
     buttonText = 'Connect EVM Wallet';
@@ -56,7 +55,7 @@ export function BridgeButton({ onBridge, isProcessing = false }: BridgeButtonPro
     buttonText = 'Insufficient Balance';
     disabled = true;
   } else {
-    buttonText = `Bridge to ${chainNames[destChain]}`;
+    buttonText = `Bridge to ${getChainName(destChain!)}`;
     disabled = false;
     onClick = onBridge;
   }

@@ -8,14 +8,14 @@ import { formatNumber } from '@/lib/utils/format';
 
 export function AmountInput() {
   const { state, setAmount, sourceChain } = useBridgeContext();
-  const { getBalanceForChain, isLoading, isFetching } = useTokenBalances();
+  const { getBalanceForChain, isLoading } = useTokenBalances();
 
-  const balance = getBalanceForChain(sourceChain);
+  const balance = sourceChain ? getBalanceForChain(sourceChain) : { raw: 0n, formatted: '0' };
 
-  // Show skeleton during the initial load, or as a safety net if a background
-  // refetch is still in-flight while the settled balance reads 0 (belt-and-suspenders
-  // guard on top of the stable-balance architecture in useTokenBalances).
-  const showBalanceSkeleton = isLoading || (isFetching && balance.raw === 0n);
+  // Show skeleton only on the very first load (before any balance has settled).
+  // Once the stable balance architecture in useTokenBalances has produced a value,
+  // always display it — never grey out during background refetches.
+  const showBalanceSkeleton = isLoading;
 
   // Don't flag insufficient balance while the skeleton is showing.
   const isInsufficientBalance =

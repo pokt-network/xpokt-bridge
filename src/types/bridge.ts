@@ -1,4 +1,4 @@
-export type EvmChain = 'ethereum' | 'base';
+export type EvmChain = 'ethereum' | 'base' | 'arbitrum';
 export type Chain = EvmChain | 'solana';
 export type Tab = 'evm' | 'solana';
 export type SolanaDirection = 'toSolana' | 'fromSolana';

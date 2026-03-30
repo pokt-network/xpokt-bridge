@@ -20,7 +20,7 @@ interface ApproveIfNeededParams {
   /** Token owner address */
   owner: `0x${string}`;
   /** Chain ID to read/write on (must match wagmi configured chains) */
-  chainId: 1 | 8453;
+  chainId: 1 | 8453 | 42161;
   /** wagmi writeContractAsync function (from useWriteContract) */
   writeContractAsync: (args: any) => Promise<`0x${string}`>;
   /** Full chain object for wagmi writeContractAsync (Rabby compatibility) */

@@ -6,15 +6,26 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { truncateAddress } from '@/lib/utils/format';
 
 export function SolanaWalletButton() {
-  const { publicKey, disconnect, connected } = useWallet();
+  const { publicKey, disconnect, connected, connecting } = useWallet();
   const { setVisible } = useWalletModal();
 
-  // Prevent hydration mismatch: always render "Connect" on first render,
-  // then update to connected state after mount (when wallet auto-reconnects)
+  // Stable address cache: prevent flashing to "Connect" during reconnection.
+  // Only update when the wallet adapter settles on a confirmed state.
   const [mounted, setMounted] = useState(false);
+  const [stableAddress, setStableAddress] = useState<string | null>(null);
+
   useEffect(() => { setMounted(true); }, []);
 
-  const showConnected = mounted && connected && publicKey;
+  useEffect(() => {
+    if (connecting) return;
+    if (connected && publicKey) {
+      setStableAddress(publicKey.toBase58());
+    } else if (!connected && !connecting) {
+      setStableAddress(null);
+    }
+  }, [connected, publicKey, connecting]);
+
+  const showConnected = mounted && stableAddress !== null;
 
   if (showConnected) {
     return (
@@ -38,7 +49,7 @@ export function SolanaWalletButton() {
         }}
       >
         <span>{'\u25CE'}</span>
-        {truncateAddress(publicKey.toBase58())}
+        {truncateAddress(stableAddress!)}
       </button>
     );
   }

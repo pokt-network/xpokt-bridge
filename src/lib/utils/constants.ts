@@ -14,9 +14,10 @@ export const COLORS = {
   borderHover: 'rgba(255, 255, 255, 0.2)',
 };
 
-export const CHAIN_COLORS = {
+export const CHAIN_COLORS: Record<string, string> = {
   ethereum: '#627eea',
   base: '#0052ff',
+  arbitrum: '#28a0f0',
   solana: '#9945ff',
 };
 

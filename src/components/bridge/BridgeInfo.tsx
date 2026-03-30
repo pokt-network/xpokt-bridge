@@ -4,14 +4,9 @@ import { useMemo } from 'react';
 import { useReadContract } from 'wagmi';
 import { formatUnits } from 'viem';
 import { useBridgeContext } from '@/context/BridgeContext';
-import { CONTRACTS, WORMHOLE_CHAIN_IDS } from '@/lib/contracts/addresses';
+import { CONTRACTS } from '@/lib/contracts/addresses';
 import { BRIDGE_ADAPTER_ABI } from '@/lib/contracts/abis/bridgeAdapter';
-
-const chainNames: Record<string, string> = {
-  ethereum: 'Ethereum',
-  base: 'Base',
-  solana: 'Solana',
-};
+import { getChainName, getEvmChainId, getWormholeChainId } from '@/lib/chains/chainRegistry';
 
 /**
  * Format a wei value as a human-readable ETH string with ~prefix.
@@ -31,19 +26,19 @@ export function BridgeInfo() {
   const { sourceChain, destChain, state } = useBridgeContext();
 
   const isSolana = state.activeTab === 'solana';
+
+  // Don't render until chains are selected (EVM tab with null chains)
+  if (!sourceChain || !destChain) return null;
+
   const bridgeType = isSolana ? 'Wormhole Token Bridge' : 'xPOKT Bridge Adapter';
   const estimatedTime = isSolana ? '15-25 minutes' : '2-20 minutes';
 
   // Determine which chain's Bridge Adapter to query for relay fee
-  const sourceChainId = sourceChain === 'ethereum' ? 1 : 8453;
-  const bridgeAdapterAddress = sourceChain === 'ethereum'
+  const sourceChainId = isSolana ? 1 : getEvmChainId(sourceChain);
+  const bridgeAdapterAddress = isSolana
     ? CONTRACTS.ethereum.bridgeAdapter
-    : CONTRACTS.base.bridgeAdapter;
-  const destWormholeChainId = destChain === 'ethereum'
-    ? WORMHOLE_CHAIN_IDS.Ethereum
-    : destChain === 'base'
-      ? WORMHOLE_CHAIN_IDS.Base
-      : WORMHOLE_CHAIN_IDS.Solana;
+    : (CONTRACTS[sourceChain as keyof typeof CONTRACTS] as any).bridgeAdapter;
+  const destWormholeChainId = getWormholeChainId(destChain);
 
   // Live relay fee quote from on-chain bridgeCost() — only for EVM↔EVM tab
   const { data: relayFeeWei, isLoading: feeLoading } = useReadContract({
@@ -78,7 +73,7 @@ export function BridgeInfo() {
         border: '1px solid rgba(2,90,242,0.15)',
       }}
     >
-      <InfoRow label="Route" value={`${chainNames[sourceChain]} \u2192 ${chainNames[destChain]}`} />
+      <InfoRow label="Route" value={`${getChainName(sourceChain)} \u2192 ${getChainName(destChain)}`} />
       <InfoRow label="Bridge" value={bridgeType} />
       <InfoRow label="Est. Time" value={estimatedTime} highlight />
       {isSolana ? (

@@ -1,11 +1,12 @@
 'use client';
 
 import { useBridgeContext } from '@/context/BridgeContext';
+import { ChainIcon } from '@/components/shared/ChainIcon';
 import type { SolanaDirection } from '@/types/bridge';
 
-const directions: { id: SolanaDirection; fromIcon: string; fromColor: string; toIcon: string; toColor: string }[] = [
-  { id: 'toSolana', fromIcon: '\u27E0', fromColor: '#627eea', toIcon: '\u25CE', toColor: '#9945ff' },
-  { id: 'fromSolana', fromIcon: '\u25CE', fromColor: '#9945ff', toIcon: '\u27E0', toColor: '#627eea' },
+const directions: { id: SolanaDirection; from: string; to: string }[] = [
+  { id: 'toSolana', from: 'ethereum', to: 'solana' },
+  { id: 'fromSolana', from: 'solana', to: 'ethereum' },
 ];
 
 export function DirectionSelector() {
@@ -43,35 +44,9 @@ export function DirectionSelector() {
               fontFamily: "'Rubik', sans-serif",
             }}
           >
-            <span style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 16,
-              fontWeight: 'bold',
-              color: 'white',
-              background: dir.fromColor,
-            }}>
-              {dir.fromIcon}
-            </span>
+            <ChainIcon chain={dir.from} size={28} />
             <span style={{ fontSize: 18, color: 'rgba(255,255,255,0.5)' }}>{'\u2192'}</span>
-            <span style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 16,
-              fontWeight: 'bold',
-              color: 'white',
-              background: dir.toColor,
-            }}>
-              {dir.toIcon}
-            </span>
+            <ChainIcon chain={dir.to} size={28} />
           </button>
         ))}
       </div>

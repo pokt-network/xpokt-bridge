@@ -5,16 +5,29 @@ import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import { truncateAddress } from '@/lib/utils/format';
 
 export function EVMWalletButton() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, isReconnecting } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
 
-  // Prevent hydration mismatch: always render "Connect" on first render,
-  // then update to connected state after mount (when wallet auto-reconnects)
+  // Stable address cache: prevent flashing to "Connect" during reconnection
+  // or refetches. Only update the displayed address when wagmi settles on
+  // a confirmed value (connected with address, or explicitly disconnected).
   const [mounted, setMounted] = useState(false);
+  const [stableAddress, setStableAddress] = useState<string | null>(null);
+
   useEffect(() => { setMounted(true); }, []);
 
-  const showConnected = mounted && isConnected && address;
+  useEffect(() => {
+    // Don't clear address during reconnection — keep showing the cached one
+    if (isReconnecting) return;
+    if (isConnected && address) {
+      setStableAddress(address);
+    } else if (!isConnected && !isReconnecting) {
+      setStableAddress(null);
+    }
+  }, [isConnected, address, isReconnecting]);
+
+  const showConnected = mounted && stableAddress !== null;
 
   if (showConnected) {
     return (
@@ -38,7 +51,7 @@ export function EVMWalletButton() {
         }}
       >
         <span>{'\u27E0'}</span>
-        {truncateAddress(address)}
+        {truncateAddress(stableAddress!)}
       </button>
     );
   }

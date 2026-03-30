@@ -8,6 +8,17 @@ import { BridgeCard } from '@/components/bridge/BridgeCard';
 import { ConvertCard } from '@/components/bridge/ConvertCard';
 import { PendingTransactionsModal } from '@/components/bridge/PendingTransactions';
 
+/** Show ConvertCard on both tabs — Lockbox is always relevant since Ethereum
+ *  is a selectable chain on the EVM tab and always involved on the Solana tab. */
+function BridgeContent() {
+  return (
+    <>
+      <BridgeCard />
+      <ConvertCard />
+    </>
+  );
+}
+
 export default function Home() {
   // Prevent hydration mismatch: wallet-dependent components (BridgeCard,
   // ConvertCard, Header wallet buttons) read wallet/balance state that
@@ -29,15 +40,12 @@ export default function Home() {
               The POKT Multichain Bridge
             </h1>
             <p style={{ fontSize: 16, fontWeight: 400, color: '#fffff' }}>
-              Bridge <a style={{ color: '#4c9bf5', textDecorationLine: 'underline' }} href="https://wpokt.network" target="_blank">wPOKT</a> to Base or Solana using the xERC20 token.
+              Bridge <a style={{ color: '#4c9bf5', textDecorationLine: 'underline' }} href="https://wpokt.network" target="_blank">wPOKT</a> to Arbitrum, Base or Solana using xERC20.
             </p>
           </div>
 
           {mounted ? (
-            <>
-              <BridgeCard />
-              <ConvertCard />
-            </>
+            <BridgeContent />
           ) : (
             /* Server/initial render placeholder matching card dimensions */
             <div

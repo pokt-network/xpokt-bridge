@@ -19,8 +19,8 @@ import { parseStoredTransactions } from '@/lib/utils/validation';
 
 export interface BridgeState {
   activeTab: Tab;
-  evmSourceChain: EvmChain;
-  evmDestChain: EvmChain;
+  evmSourceChain: EvmChain | null;
+  evmDestChain: EvmChain | null;
   solanaDirection: SolanaDirection;
   amount: string;
   destToken: 'wpokt' | 'xpokt';
@@ -32,8 +32,8 @@ export interface BridgeState {
 
 const initialState: BridgeState = {
   activeTab: 'evm',
-  evmSourceChain: 'ethereum',
-  evmDestChain: 'base',
+  evmSourceChain: null,
+  evmDestChain: null,
   solanaDirection: 'toSolana',
   amount: '',
   destToken: 'xpokt',
@@ -175,8 +175,8 @@ function bridgeReducer(state: BridgeState, action: BridgeAction): BridgeState {
 interface BridgeContextValue {
   state: BridgeState;
   dispatch: Dispatch<BridgeAction>;
-  sourceChain: Chain;
-  destChain: Chain;
+  sourceChain: Chain | null;
+  destChain: Chain | null;
   showTokenDropdown: boolean;
   setTab: (tab: Tab) => void;
   setEvmSourceChain: (chain: EvmChain) => void;
@@ -229,11 +229,11 @@ export function BridgeProvider({ children }: BridgeProviderProps) {
     }
   }, [state.pendingTransactions]);
 
-  const sourceChain: Chain = state.activeTab === 'evm'
+  const sourceChain: Chain | null = state.activeTab === 'evm'
     ? state.evmSourceChain
     : (state.solanaDirection === 'toSolana' ? 'ethereum' : 'solana');
 
-  const destChain: Chain = state.activeTab === 'evm'
+  const destChain: Chain | null = state.activeTab === 'evm'
     ? state.evmDestChain
     : (state.solanaDirection === 'toSolana' ? 'solana' : 'ethereum');
 

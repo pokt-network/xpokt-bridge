@@ -17,6 +17,13 @@ export const CONTRACTS = {
     bridgeAdapter: '0x6c49e1ecfbe1ab0184ddf5f2200b58827293940f' as const,
     wormholeRelayer: '0x706f82e9bb5b0813501714ab5974216704980e31' as const,
   },
+  arbitrum: {
+    chainId: 42161,
+    wormholeChainId: 23,
+    xPOKT: '0x764a726d9ced0433a8d7643335919deb03a9a935' as const,
+    bridgeAdapter: '0x6c49e1ecfbe1ab0184ddf5f2200b58827293940f' as const,
+    wormholeRelayer: '0x27428DD2d3DD32A4D7f7C497eAaa23130d894911' as const,
+  },
   solana: {
     wormholeChainId: 1,
     poktMint: '6CAsXfiCXZfP8APCG6Vma2DFMindopxiqYQN4LSQfhoC' as const,
@@ -28,6 +35,7 @@ export const CONTRACTS = {
 export const WORMHOLE_CHAIN_IDS = {
   Solana: 1,
   Ethereum: 2,
+  Arbitrum: 23,
   Base: 30,
 } as const;
 

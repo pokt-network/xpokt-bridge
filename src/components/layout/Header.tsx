@@ -11,13 +11,21 @@ export function Header() {
   const showSolanaWallet = state.activeTab === 'solana';
 
   return (
-    <header className="flex justify-between items-center max-w-[1200px] mx-auto p-6 mb-8">
+    <header style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      maxWidth: 1200,
+      margin: '0 auto',
+      padding: 24,
+      marginBottom: 32,
+    }}>
       <img
         src={BRAND_ASSETS.logo}
         alt="Pocket Network"
-        className="h-10"
+        style={{ height: 40 }}
       />
-      <div className="flex gap-3 items-center">
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
         <PendingBadge />
         <EVMWalletButton />
         {showSolanaWallet && <SolanaWalletButton />}

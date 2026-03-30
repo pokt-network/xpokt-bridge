@@ -1,10 +1,12 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { parseUnits } from 'viem';
 import { useBridgeContext } from '@/context/BridgeContext';
+import { getChainName } from '@/lib/chains/chainRegistry';
+import type { EvmChain } from '@/types/bridge';
 import { useCompoundEVMBridge } from '@/hooks/useCompoundEVMBridge';
 import { useCompoundSolanaBridge } from '@/hooks/useCompoundSolanaBridge';
 import { useUnifiedSolanaBridge } from '@/hooks/useUnifiedSolanaBridge';
@@ -22,7 +24,6 @@ import {
   useCompoundEVMBridgeSteps,
   useCompoundSolanaBridgeSteps,
   useSolanaToEthSteps,
-  useEthToSolanaSteps,
 } from './TransactionStepper';
 
 export function BridgeCard() {
@@ -70,18 +71,20 @@ function EVMBridgeContent({
   onDestSelect,
   onSwap,
 }: {
-  sourceChain: 'ethereum' | 'base';
-  destChain: 'ethereum' | 'base';
-  onSourceSelect: (chain: 'ethereum' | 'base') => void;
-  onDestSelect: (chain: 'ethereum' | 'base') => void;
+  sourceChain: EvmChain | null;
+  destChain: EvmChain | null;
+  onSourceSelect: (chain: EvmChain) => void;
+  onDestSelect: (chain: EvmChain) => void;
   onSwap: () => void;
 }) {
   const { state, startProcessing, stopProcessing, resetForm } = useBridgeContext();
   const { address } = useAccount();
 
+  // Default to ethereum/base when null — hook needs non-null values.
+  // Bridge button is disabled when either chain is null, so these defaults are never used for actual bridging.
   const evmBridge = useCompoundEVMBridge({
-    sourceChain,
-    destChain,
+    sourceChain: sourceChain ?? 'ethereum',
+    destChain: destChain ?? 'base',
   });
 
   // Poll Wormholescan for relay delivery when in 'waiting-relay' state
@@ -103,7 +106,7 @@ function EVMBridgeContent({
   const isComplete = evmBridge.state.step === 'complete';
 
   const handleBridge = useCallback(async () => {
-    if (!state.amount || !address) return;
+    if (!state.amount || !address || !sourceChain || !destChain) return;
     startProcessing();
     try {
       await evmBridge.bridge(state.amount);
@@ -130,7 +133,7 @@ function EVMBridgeContent({
       <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
         <button
           onClick={onSwap}
-          disabled={isActive}
+          disabled={isActive || !sourceChain || !destChain}
           style={{
             width: 40,
             height: 40,
@@ -140,11 +143,11 @@ function EVMBridgeContent({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            cursor: isActive ? 'not-allowed' : 'pointer',
+            cursor: (isActive || !sourceChain || !destChain) ? 'not-allowed' : 'pointer',
             color: '#025af2',
             fontSize: 20,
             transition: 'all 0.2s ease',
-            opacity: isActive ? 0.5 : 1,
+            opacity: (isActive || !sourceChain || !destChain) ? 0.5 : 1,
           }}
         >
           {'\u21C5'}
@@ -257,26 +260,28 @@ function SolanaBridgeContent() {
   // Determine which hook is active based on direction
   const isToSolana = direction === 'toSolana';
 
+  // ─── Claim flow state ──────────────────────────────────────────────────────
+  // VAA bytes are stored here once polling completes; the user then clicks Claim.
+  const [vaaResult, setVaaResult] = useState<{ vaaBytes: string } | null>(null);
+  const [bridgeAmountRaw, setBridgeAmountRaw] = useState<bigint>(0n);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [sourceTxHashForLink, setSourceTxHashForLink] = useState<string | null>(null);
+
   // Get step state from the active hook
   const activeStep = isToSolana ? compoundSolana.state.step : unifiedSolana.state.step;
   const activeError = isToSolana ? compoundSolana.state.error : unifiedSolana.state.error;
-  const isActive = activeStep !== 'idle' && activeStep !== 'error' && activeStep !== 'complete';
+
+  const isVaaReady = vaaResult !== null && !isClaiming;
+  const isActive = (activeStep !== 'idle' && activeStep !== 'error' && activeStep !== 'complete') || isClaiming;
   const isComplete = activeStep === 'complete';
   const hasError = activeStep === 'error';
+  const isWaitingVAA = activeStep === 'waiting-vaa';
 
   // Build steps for TransactionStepper
   const compoundSolanaSteps = useCompoundSolanaBridgeSteps(
     compoundSolana.state.step,
     compoundSolana.state.needsLockboxConversion,
     compoundSolana.state.txHashes
-  );
-
-  const ethToSolanaSteps = useEthToSolanaSteps(
-    unifiedSolana.state.step,
-    {
-      source: unifiedSolana.state.sourceTxHash,
-      destination: unifiedSolana.state.destTxHash,
-    }
   );
 
   const solanaToEthSteps = useSolanaToEthSteps(
@@ -292,51 +297,49 @@ function SolanaBridgeContent() {
   // Pick the right steps to display
   const steps = isToSolana ? compoundSolanaSteps : solanaToEthSteps;
 
+  // Destination chain name for claim button
+  const claimChainName = isToSolana ? 'Solana' : 'Ethereum';
+
+  /**
+   * Phase 1: Initiate bridge + poll for VAA. Stops before claiming.
+   */
   const handleBridge = useCallback(async () => {
     if (!state.amount) return;
 
+    setVaaResult(null);
+    setSourceTxHashForLink(null);
     startProcessing();
+
     try {
       if (isToSolana) {
-        // ETH → Solana: use compound hook (auto wPOKT conversion + Wormhole)
         if (!evmAddress || !solanaPublicKey) return;
         const result = await compoundSolana.bridge(
           state.amount,
           solanaPublicKey.toBase58()
         );
-        console.log('[SolanaBridge] ETH→Solana initiated:', result);
 
-        // Poll for VAA, then claim on Solana
         if (result?.sourceTxHash) {
+          setSourceTxHashForLink(result.sourceTxHash);
           const vaa = await compoundSolana.waitForVAA(result.sourceTxHash);
           if (vaa?.vaaBytes) {
-            console.log('[SolanaBridge] VAA ready, claiming on Solana...');
-            await compoundSolana.completeTransfer(vaa.vaaBytes);
-            console.log('[SolanaBridge] ETH→Solana complete');
+            setVaaResult(vaa);
           }
         }
       } else {
-        // Solana → ETH: use unified hook
         if (!evmAddress || !solanaPublicKey) return;
         const amountRaw = parseUnits(state.amount, 6);
+        setBridgeAmountRaw(amountRaw);
         const result = await unifiedSolana.initiateTransfer(
           amountRaw,
           solanaPublicKey.toBase58(),
           evmAddress
         );
-        console.log('[SolanaBridge] Solana→ETH initiated:', result);
 
-        // Poll for VAA, then claim on Ethereum
         if (result?.sourceTxHash) {
+          setSourceTxHashForLink(result.sourceTxHash);
           const vaa = await unifiedSolana.waitForVAA(result.sourceTxHash);
           if (vaa?.vaaBytes) {
-            console.log('[SolanaBridge] VAA ready, claiming on Ethereum...');
-            await unifiedSolana.completeTransferWithConversion(
-              vaa.vaaBytes,
-              state.destToken,
-              amountRaw,
-            );
-            console.log('[SolanaBridge] Solana→ETH complete');
+            setVaaResult(vaa);
           }
         }
       }
@@ -347,7 +350,6 @@ function SolanaBridgeContent() {
     }
   }, [
     state.amount,
-    state.destToken,
     isToSolana,
     evmAddress,
     solanaPublicKey,
@@ -357,9 +359,37 @@ function SolanaBridgeContent() {
     stopProcessing,
   ]);
 
+  /**
+   * Phase 2: User clicks Claim — complete the transfer on the destination chain.
+   */
+  const handleClaim = useCallback(async () => {
+    if (!vaaResult?.vaaBytes) return;
+
+    setIsClaiming(true);
+    try {
+      if (isToSolana) {
+        await compoundSolana.completeTransfer(vaaResult.vaaBytes);
+      } else {
+        await unifiedSolana.completeTransferWithConversion(
+          vaaResult.vaaBytes,
+          state.destToken,
+          bridgeAmountRaw,
+        );
+      }
+    } catch (error: any) {
+      console.error('[SolanaBridge] Claim error:', error);
+    } finally {
+      setIsClaiming(false);
+    }
+  }, [vaaResult, isToSolana, compoundSolana, unifiedSolana, state.destToken, bridgeAmountRaw]);
+
   const handleReset = useCallback(() => {
     compoundSolana.reset();
     unifiedSolana.reset();
+    setVaaResult(null);
+    setBridgeAmountRaw(0n);
+    setSourceTxHashForLink(null);
+    setIsClaiming(false);
     resetForm();
   }, [compoundSolana, unifiedSolana, resetForm]);
 
@@ -371,14 +401,49 @@ function SolanaBridgeContent() {
       <BridgeInfo />
 
       {/* Transaction Stepper — shown during active bridge flow */}
-      {(isActive || isComplete || hasError) && (
+      {(isActive || isComplete || hasError || isVaaReady) && (
         <div style={{ marginBottom: 16 }}>
           <TransactionStepper steps={steps} variant="vertical" />
         </div>
       )}
 
-      {/* Bridge / Reset Button */}
-      {isComplete || hasError ? (
+      {/* Source tx link — shown while waiting for VAA */}
+      {sourceTxHashForLink && isWaitingVAA && (
+        <div style={{ marginBottom: 12, textAlign: 'center' }}>
+          <a
+            href={`https://wormholescan.io/#/tx/${sourceTxHashForLink}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 12, color: '#4c9bf5', textDecoration: 'underline' }}
+          >
+            View on Wormholescan
+          </a>
+        </div>
+      )}
+
+      {/* Claim Button — shown when VAA is ready */}
+      {isVaaReady && !isComplete && !hasError ? (
+        <button
+          onClick={handleClaim}
+          style={{
+            width: '100%',
+            padding: 18,
+            background: 'linear-gradient(135deg, #025af2 0%, #0147c2 100%)',
+            border: 'none',
+            borderRadius: 14,
+            color: '#ffffff',
+            fontSize: 16,
+            fontWeight: 600,
+            fontFamily: "'Rubik', sans-serif",
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: '0 4px 20px rgba(2, 90, 242, 0.4)',
+          }}
+        >
+          Claim Tokens on {claimChainName}
+        </button>
+      ) : isComplete || hasError ? (
+        /* Reset Button */
         <button
           onClick={handleReset}
           style={{
@@ -397,17 +462,18 @@ function SolanaBridgeContent() {
             transition: 'all 0.2s ease',
           }}
         >
-          {isComplete ? '✓ Bridge Complete — Start New' : 'Try Again'}
+          {isComplete ? '\u2713 Bridge Complete — Bridge Another' : 'Try Again'}
         </button>
       ) : (
+        /* Bridge / Processing Button */
         <BridgeButton
           onBridge={handleBridge}
           isProcessing={isActive}
         />
       )}
 
-      {/* Warning box */}
-      <WarningBox />
+      {/* Warning box — context-aware */}
+      <WarningBox claimReady={isVaaReady} />
 
       {/* Error message */}
       {activeError && (

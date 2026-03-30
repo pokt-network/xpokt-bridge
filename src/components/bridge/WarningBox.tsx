@@ -1,4 +1,32 @@
-export function WarningBox() {
+'use client';
+
+interface WarningBoxProps {
+  /** Override message when VAA is ready */
+  claimReady?: boolean;
+}
+
+export function WarningBox({ claimReady = false }: WarningBoxProps) {
+  if (claimReady) {
+    return (
+      <div
+        style={{
+          background: 'rgba(72, 229, 194, 0.1)',
+          border: '1px solid rgba(72, 229, 194, 0.2)',
+          borderRadius: 12,
+          padding: 16,
+          marginTop: 16,
+        }}
+      >
+        <div style={{ fontSize: 13, color: '#48e5c2', marginBottom: 4 }}>
+          {'\u2705'} Your tokens are ready to claim
+        </div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+          Sign a transaction on the destination chain to receive your tokens.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{

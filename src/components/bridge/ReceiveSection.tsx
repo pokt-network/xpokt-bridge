@@ -3,20 +3,15 @@
 import { useBridgeContext } from '@/context/BridgeContext';
 import { TokenIcon } from '@/components/shared/TokenIcon';
 import { TokenDropdown } from './TokenDropdown';
-
-const chainNames: Record<string, string> = {
-  ethereum: 'Ethereum',
-  base: 'Base',
-  solana: 'Solana',
-};
+import { getChainName } from '@/lib/chains/chainRegistry';
 
 export function ReceiveSection() {
   const { state, showTokenDropdown, sourceChain, destChain } = useBridgeContext();
   const receiveAmount = state.amount || '0.00';
 
   // Build label: "You Receive" for EVM, "You Receive on Solana" / "You Receive on Ethereum" for Solana tab
-  const label = state.activeTab === 'solana'
-    ? `You Receive on ${chainNames[destChain]}`
+  const label = state.activeTab === 'solana' && destChain
+    ? `You Receive on ${getChainName(destChain)}`
     : 'You Receive';
 
   return (
@@ -60,7 +55,7 @@ export function ReceiveSection() {
       </div>
 
       {/* Base -> ETH with wPOKT destination note */}
-      {showTokenDropdown && state.destToken === 'wpokt' && sourceChain === 'base' && state.activeTab === 'evm' && (
+      {showTokenDropdown && state.destToken === 'wpokt' && sourceChain !== 'ethereum' && state.activeTab === 'evm' && (
         <div style={{
           marginTop: 12,
           padding: 12,

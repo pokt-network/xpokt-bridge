@@ -4,10 +4,11 @@ import { useState, useCallback } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
 import { readContract, waitForTransactionReceipt } from '@wagmi/core';
 import { parseUnits } from 'viem';
-import { CONTRACTS, WORMHOLE_CHAIN_IDS } from '@/lib/contracts/addresses';
+import { CONTRACTS } from '@/lib/contracts/addresses';
 import { ERC20_ABI } from '@/lib/contracts/abis/erc20';
 import { BRIDGE_ADAPTER_ABI } from '@/lib/contracts/abis/bridgeAdapter';
 import { wagmiConfig } from '@/lib/chains/config';
+import { getEvmChainId, getWormholeChainId } from '@/lib/chains/chainRegistry';
 import type { EvmChain } from '@/types/bridge';
 
 const TOKEN_DECIMALS = 6;
@@ -26,6 +27,15 @@ interface UseEVMBridgeOptions {
   destChain: EvmChain;
 }
 
+/** Get contract addresses for any supported EVM chain */
+function getChainContracts(chain: EvmChain) {
+  const contracts = CONTRACTS[chain];
+  return {
+    xPOKT: contracts.xPOKT,
+    bridgeAdapter: contracts.bridgeAdapter,
+  };
+}
+
 export function useEVMBridge({ sourceChain, destChain }: UseEVMBridgeOptions) {
   const { address } = useAccount();
   const { writeContractAsync } = useWriteContract();
@@ -34,28 +44,13 @@ export function useEVMBridge({ sourceChain, destChain }: UseEVMBridgeOptions) {
     error: null,
   });
 
-  const sourceChainId = sourceChain === 'ethereum' ? 1 : 8453;
-  const destWormholeChainId = destChain === 'ethereum'
-    ? WORMHOLE_CHAIN_IDS.Ethereum
-    : WORMHOLE_CHAIN_IDS.Base;
-
-  const getSourceContracts = useCallback(() => {
-    if (sourceChain === 'ethereum') {
-      return {
-        xPOKT: CONTRACTS.ethereum.xPOKT,
-        bridgeAdapter: CONTRACTS.ethereum.bridgeAdapter,
-      };
-    }
-    return {
-      xPOKT: CONTRACTS.base.xPOKT,
-      bridgeAdapter: CONTRACTS.base.bridgeAdapter,
-    };
-  }, [sourceChain]);
+  const sourceChainId = getEvmChainId(sourceChain);
+  const destWormholeChainId = getWormholeChainId(destChain);
 
   const bridge = useCallback(async (amount: string, recipient?: string) => {
     if (!address) throw new Error('Wallet not connected');
 
-    const contracts = getSourceContracts();
+    const contracts = getChainContracts(sourceChain);
     const amountWei = parseUnits(amount, TOKEN_DECIMALS);
     const recipientAddress = recipient || address;
 
@@ -99,7 +94,7 @@ export function useEVMBridge({ sourceChain, destChain }: UseEVMBridgeOptions) {
       setState(prev => ({ ...prev, step: 'error', error: error.message || 'Bridge failed' }));
       throw error;
     }
-  }, [address, getSourceContracts, sourceChainId, destWormholeChainId, writeContractAsync]);
+  }, [address, sourceChain, sourceChainId, destWormholeChainId, writeContractAsync]);
 
   const markComplete = useCallback(() => {
     setState(prev => ({ ...prev, step: 'complete' }));

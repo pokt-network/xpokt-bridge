@@ -1,9 +1,9 @@
 import { http, createConfig } from 'wagmi';
-import { mainnet, base } from 'wagmi/chains';
+import { mainnet, base, arbitrum } from 'wagmi/chains';
 import { injected, coinbaseWallet } from 'wagmi/connectors';
 
 export const wagmiConfig = createConfig({
-  chains: [mainnet, base],
+  chains: [mainnet, base, arbitrum],
   connectors: [
     injected(),
     coinbaseWallet({
@@ -15,5 +15,6 @@ export const wagmiConfig = createConfig({
     // Pocket Network public RPC endpoints (CORS-friendly, no API key required).
     [mainnet.id]: http('https://eth.api.pocket.network'),
     [base.id]: http('https://base.api.pocket.network'),
+    [arbitrum.id]: http('https://arb1.arbitrum.io/rpc'),
   },
 });
