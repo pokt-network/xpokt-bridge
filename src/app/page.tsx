@@ -33,6 +33,44 @@ export default function Home() {
       <div style={{ position: 'relative', zIndex: 2, minHeight: '100vh' }}>
         <Header />
 
+        {/* Maintenance banner */}
+        <div
+          style={{
+            maxWidth: 520,
+            margin: '0 auto 0',
+            padding: '0 24px',
+          }}
+        >
+          <div
+            style={{
+              background: 'rgba(255,197,71,0.12)',
+              border: '1px solid rgba(255,197,71,0.35)',
+              borderRadius: 12,
+              padding: 16,
+              marginBottom: 24,
+              fontSize: 13,
+              lineHeight: 1.55,
+              color: 'rgba(255,255,255,0.85)',
+            }}
+          >
+            <span style={{ color: '#ffc547', fontWeight: 600 }}>
+              {'\u26A0\uFE0F'} Attention:
+            </span>{' '}
+            The multichain bridge will enter maintenance mode at 11:30AM EST.
+            It is expected to be offline for several hours while we upgrade to
+            meet Wormhole&apos;s{' '}
+            <a
+              href="https://wormhole.com/blog/migrating-from-standard-relay-to-executor-relay-what-every-wormhole-builder-needs-to-know"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: '#ffc547', textDecoration: 'underline' }}
+            >
+              new requirements
+            </a>
+            . We apologize for any inconvenience.
+          </div>
+        </div>
+
         <main style={{ maxWidth: 520, margin: '0 auto', padding: '0 24px 48px' }}>
           {/* Headline */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
