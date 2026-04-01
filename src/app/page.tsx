@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Background } from '@/components/layout/Background';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -19,13 +20,12 @@ function BridgeContent() {
   );
 }
 
-export default function Home() {
-  // Prevent hydration mismatch: wallet-dependent components (BridgeCard,
-  // ConvertCard, Header wallet buttons) read wallet/balance state that
-  // differs between server (no wallet) and client (wallet auto-connected).
-  // Defer rendering until after hydration completes.
+function HomeInner() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  const searchParams = useSearchParams();
+  const maintenanceBypass = searchParams.get('pwd') === 'pnf-team';
 
   return (
     <>
@@ -33,53 +33,55 @@ export default function Home() {
       <div style={{ position: 'relative', zIndex: 2, minHeight: '100vh' }}>
         <Header />
 
-        {/* Maintenance overlay */}
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9999,
-            background: 'rgba(0,0,0,0.90)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 24,
-            overflow: 'hidden',
-          }}
-        >
+        {/* Maintenance overlay — bypassed with ?pwd=pnf-team */}
+        {!maintenanceBypass && (
           <div
             style={{
-              background: 'rgba(255,197,71,0.12)',
-              border: '1px solid rgba(255,197,71,0.35)',
-              borderRadius: 16,
-              padding: '32px 36px',
-              maxWidth: 520,
-              width: '100%',
-              fontSize: 15,
-              lineHeight: 1.65,
-              color: 'rgba(255,255,255,0.85)',
-              textAlign: 'left',
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9999,
+              background: 'rgba(0,0,0,0.90)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 24,
+              overflow: 'hidden',
             }}
           >
-            <div style={{ fontSize: 32, marginBottom: 16 }}>{'\u26A0\uFE0F'}</div>
-            <span style={{ color: '#ffc547', fontWeight: 700 }}>
-              MAINTENANCE MODE:
-            </span>{' '}
-            The bridge is now in maintenance mode. It is expected to be offline
-            for several hours while we upgrade to meet Wormhole&apos;s{' '}
-            <a
-              href="https://wormhole.com/blog/migrating-from-standard-relay-to-executor-relay-what-every-wormhole-builder-needs-to-know"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: '#ffc547', textDecoration: 'underline' }}
+            <div
+              style={{
+                background: 'rgba(255,197,71,0.12)',
+                border: '1px solid rgba(255,197,71,0.35)',
+                borderRadius: 16,
+                padding: '32px 36px',
+                maxWidth: 520,
+                width: '100%',
+                fontSize: 15,
+                lineHeight: 1.65,
+                color: 'rgba(255,255,255,0.85)',
+                textAlign: 'left',
+              }}
             >
-              new requirements
-            </a>
-            . We apologize for any inconvenience.
+              <div style={{ fontSize: 32, marginBottom: 16 }}>{'\u26A0\uFE0F'}</div>
+              <span style={{ color: '#ffc547', fontWeight: 700 }}>
+                MAINTENANCE MODE:
+              </span>{' '}
+              The bridge is now in maintenance mode. It is expected to be offline
+              for several hours while we upgrade to meet Wormhole&apos;s{' '}
+              <a
+                href="https://wormhole.com/blog/migrating-from-standard-relay-to-executor-relay-what-every-wormhole-builder-needs-to-know"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: '#ffc547', textDecoration: 'underline' }}
+              >
+                new requirements
+              </a>
+              . We apologize for any inconvenience.
+            </div>
           </div>
-        </div>
+        )}
 
-        <main style={{ pointerEvents: 'none', maxWidth: 520, margin: '0 auto', padding: '0 24px 48px' }} aria-disabled="true">
+        <main style={{ ...(!maintenanceBypass && { pointerEvents: 'none' as const }), maxWidth: 520, margin: '0 auto', padding: '0 24px 48px' }} aria-disabled={!maintenanceBypass}>
           {/* Headline */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
             <h1 style={{ fontSize: 28, fontWeight: 600, color: '#ffc547', marginBottom: 18 }}>
@@ -136,5 +138,13 @@ export default function Home() {
       {/* Modal rendered at page level */}
       {mounted && <PendingTransactionsModal />}
     </>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense>
+      <HomeInner />
+    </Suspense>
   );
 }
