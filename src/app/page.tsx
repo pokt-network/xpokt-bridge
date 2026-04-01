@@ -79,7 +79,7 @@ export default function Home() {
           </div>
         </div>
 
-        <main style={{ pointerEvents: 'none' }} aria-disabled="true" style={{ maxWidth: 520, margin: '0 auto', padding: '0 24px 48px' }}>
+        <main style={{ pointerEvents: 'none', maxWidth: 520, margin: '0 auto', padding: '0 24px 48px' }} aria-disabled="true">
           {/* Headline */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
             <h1 style={{ fontSize: 28, fontWeight: 600, color: '#ffc547', marginBottom: 18 }}>
