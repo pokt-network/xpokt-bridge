@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
-import { waitForTransactionReceipt } from '@wagmi/core';
+import { waitForReceiptWithRetry } from '@/lib/utils/waitForReceipt';
 import { parseUnits } from 'viem';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
@@ -12,7 +12,6 @@ import type { UnsignedTransaction } from '@wormhole-foundation/sdk';
 import { CONTRACTS } from '@/lib/contracts/addresses';
 import { ERC20_ABI } from '@/lib/contracts/abis/erc20';
 import { WORMHOLE_TOKEN_BRIDGE_ABI } from '@/lib/contracts/abis/wormholeTokenBridge';
-import { wagmiConfig } from '@/lib/chains/config';
 import { getWormholeContext } from '@/lib/wormhole/context';
 import { SolanaWalletSigner } from '@/lib/wormhole/solanaSigner';
 import { useWormholeVAA } from './useWormholeVAA';
@@ -84,7 +83,7 @@ export function useSolanaBridge() {
         args: [CONTRACTS.ethereum.wormholeTokenBridge as `0x${string}`, amountWei],
         chainId: 1,
       });
-      await waitForTransactionReceipt(wagmiConfig, { hash: approveTx, chainId: 1 });
+      await waitForReceiptWithRetry(approveTx, 1);
       setState(prev => ({ ...prev, approveTxHash: approveTx }));
 
       // Initiate transfer via Token Bridge
@@ -105,7 +104,7 @@ export function useSolanaBridge() {
         chainId: 1,
         value: 0n,
       });
-      await waitForTransactionReceipt(wagmiConfig, { hash: initTx, chainId: 1 });
+      await waitForReceiptWithRetry(initTx, 1);
 
       setState(prev => ({ ...prev, step: 'waiting-vaa', initiateTxHash: initTx }));
       return { sourceTxHash: initTx, approveTxHash: approveTx };

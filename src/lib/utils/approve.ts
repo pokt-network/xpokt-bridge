@@ -6,8 +6,9 @@
  * This saves gas on retries and prevents the classic ERC20 approval race condition.
  */
 
-import { readContract, waitForTransactionReceipt } from '@wagmi/core';
+import { readContract } from '@wagmi/core';
 import { wagmiConfig } from '@/lib/chains/config';
+import { waitForReceiptWithRetry } from '@/lib/utils/waitForReceipt';
 import { ERC20_ABI } from '@/lib/contracts/abis/erc20';
 
 interface ApproveIfNeededParams {
@@ -86,10 +87,7 @@ export async function approveIfNeeded({
 
   const txHash = await writeContractAsync(writeArgs);
 
-  await waitForTransactionReceipt(wagmiConfig, {
-    hash: txHash,
-    chainId,
-  });
+  await waitForReceiptWithRetry(txHash, chainId);
 
   return { wasNeeded: true, txHash };
 }

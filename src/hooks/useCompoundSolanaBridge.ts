@@ -2,12 +2,13 @@
 
 import { useState, useCallback } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
-import { readContract, waitForTransactionReceipt } from '@wagmi/core';
+import { readContract } from '@wagmi/core';
+import { wagmiConfig } from '@/lib/chains/config';
+import { waitForReceiptWithRetry } from '@/lib/utils/waitForReceipt';
 import { parseUnits } from 'viem';
 import { CONTRACTS } from '@/lib/contracts/addresses';
 import { ERC20_ABI } from '@/lib/contracts/abis/erc20';
 import { LOCKBOX_ABI } from '@/lib/contracts/abis/lockbox';
-import { wagmiConfig } from '@/lib/chains/config';
 import { useSolanaBridge } from './useSolanaBridge';
 
 const TOKEN_DECIMALS = 6;
@@ -117,7 +118,7 @@ export function useCompoundSolanaBridge() {
           args: [CONTRACTS.ethereum.lockbox as `0x${string}`, lockboxAmount],
           chainId: 1,
         });
-        await waitForTransactionReceipt(wagmiConfig, { hash: wpoktApproveTx, chainId: 1 });
+        await waitForReceiptWithRetry(wpoktApproveTx, 1);
         setState(prev => ({ ...prev, txHashes: { ...prev.txHashes, wpoktApprove: wpoktApproveTx } }));
 
         setState(prev => ({ ...prev, step: 'converting-lockbox' }));
@@ -128,7 +129,7 @@ export function useCompoundSolanaBridge() {
           args: [lockboxAmount],
           chainId: 1,
         });
-        await waitForTransactionReceipt(wagmiConfig, { hash: lockboxTx, chainId: 1 });
+        await waitForReceiptWithRetry(lockboxTx, 1);
         setState(prev => ({ ...prev, txHashes: { ...prev.txHashes, lockboxDeposit: lockboxTx } }));
       }
 

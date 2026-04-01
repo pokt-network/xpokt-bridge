@@ -2,12 +2,11 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
-import { waitForTransactionReceipt } from '@wagmi/core';
+import { waitForReceiptWithRetry } from '@/lib/utils/waitForReceipt';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { Wormhole, type TokenTransfer } from '@wormhole-foundation/sdk';
 import { CONTRACTS } from '@/lib/contracts/addresses';
 import { WORMHOLE_TOKEN_BRIDGE_ABI } from '@/lib/contracts/abis/wormholeTokenBridge';
-import { wagmiConfig } from '@/lib/chains/config';
 import { getWormholeContext } from '@/lib/wormhole/context';
 import { SolanaWalletSigner } from '@/lib/wormhole/solanaSigner';
 import { useWormholeVAA } from './useWormholeVAA';
@@ -157,10 +156,7 @@ export function useSolanaToEthBridge() {
         chainId: 1,
       });
 
-      await waitForTransactionReceipt(wagmiConfig, {
-        hash: completeTx,
-        chainId: 1,
-      });
+      await waitForReceiptWithRetry(completeTx, 1);
 
       setState(prev => ({ ...prev, step: 'complete', completeTxHash: completeTx }));
       return completeTx;

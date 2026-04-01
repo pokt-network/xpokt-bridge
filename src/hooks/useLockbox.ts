@@ -2,37 +2,13 @@
 
 import { useState, useCallback } from 'react';
 import { useAccount, useWriteContract, useConfig } from 'wagmi';
-import { waitForTransactionReceipt, switchChain } from '@wagmi/core';
+import { switchChain } from '@wagmi/core';
 import { mainnet } from 'wagmi/chains';
 import { CONTRACTS } from '@/lib/contracts/addresses';
 import { ERC20_ABI } from '@/lib/contracts/abis/erc20';
 import { LOCKBOX_ABI } from '@/lib/contracts/abis/lockbox';
-import { wagmiConfig } from '@/lib/chains/config';
 import { approveIfNeeded } from '@/lib/utils/approve';
-
-/**
- * waitForTransactionReceipt with retry on transient HTTP/network errors.
- */
-async function waitForReceiptWithRetry(
-  hash: `0x${string}`,
-  chainId: 1 | 8453,
-  retries = 3
-) {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      return await waitForTransactionReceipt(wagmiConfig, { hash, chainId });
-    } catch (err: any) {
-      const msg = err?.message || '';
-      const isTransient = msg.includes('HTTP request failed') || msg.includes('fetch') || msg.includes('network');
-      if (isTransient && attempt < retries) {
-        console.warn(`[Lockbox] Receipt fetch attempt ${attempt} failed, retrying in 3s...`);
-        await new Promise(r => setTimeout(r, 3000));
-        continue;
-      }
-      throw err;
-    }
-  }
-}
+import { waitForReceiptWithRetry } from '@/lib/utils/waitForReceipt';
 
 export type LockboxStep = 'idle' | 'switching-chain' | 'approving' | 'converting' | 'complete' | 'error';
 

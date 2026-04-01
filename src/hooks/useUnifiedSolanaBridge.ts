@@ -2,13 +2,12 @@
 
 import { useState, useCallback } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
-import { waitForTransactionReceipt } from '@wagmi/core';
+import { waitForReceiptWithRetry } from '@/lib/utils/waitForReceipt';
 import { useSolanaBridge } from './useSolanaBridge';
 import { useSolanaToEthBridge } from './useSolanaToEthBridge';
 import { CONTRACTS } from '@/lib/contracts/addresses';
 import { ERC20_ABI } from '@/lib/contracts/abis/erc20';
 import { LOCKBOX_ABI } from '@/lib/contracts/abis/lockbox';
-import { wagmiConfig } from '@/lib/chains/config';
 import type { SolanaDirection, Chain } from '@/types/bridge';
 
 export type UnifiedSolanaBridgeStep =
@@ -131,7 +130,7 @@ export function useUnifiedSolanaBridge({ direction }: UseUnifiedSolanaBridgeOpti
           args: [CONTRACTS.ethereum.lockbox as `0x${string}`, claimedAmount],
           chainId: 1,
         });
-        await waitForTransactionReceipt(wagmiConfig, { hash: approveTx, chainId: 1 });
+        await waitForReceiptWithRetry(approveTx, 1);
 
         setState(prev => ({ ...prev, step: 'converting-lockbox' }));
         const withdrawTx = await writeContractAsync({
@@ -141,7 +140,7 @@ export function useUnifiedSolanaBridge({ direction }: UseUnifiedSolanaBridgeOpti
           args: [claimedAmount],
           chainId: 1,
         });
-        await waitForTransactionReceipt(wagmiConfig, { hash: withdrawTx, chainId: 1 });
+        await waitForReceiptWithRetry(withdrawTx, 1);
 
         setState(prev => ({ ...prev, step: 'complete', conversionTxHash: withdrawTx }));
         return { destTxHash, conversionTxHash: withdrawTx };

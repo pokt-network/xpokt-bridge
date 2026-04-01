@@ -2,12 +2,13 @@
 
 import { useState, useCallback } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
-import { readContract, waitForTransactionReceipt } from '@wagmi/core';
+import { readContract } from '@wagmi/core';
+import { wagmiConfig } from '@/lib/chains/config';
+import { waitForReceiptWithRetry } from '@/lib/utils/waitForReceipt';
 import { parseUnits } from 'viem';
 import { CONTRACTS } from '@/lib/contracts/addresses';
 import { ERC20_ABI } from '@/lib/contracts/abis/erc20';
 import { BRIDGE_ADAPTER_ABI } from '@/lib/contracts/abis/bridgeAdapter';
-import { wagmiConfig } from '@/lib/chains/config';
 import { getEvmChainId, getWormholeChainId } from '@/lib/chains/chainRegistry';
 import type { EvmChain } from '@/types/bridge';
 
@@ -64,7 +65,7 @@ export function useEVMBridge({ sourceChain, destChain }: UseEVMBridgeOptions) {
         args: [contracts.bridgeAdapter as `0x${string}`, amountWei],
         chainId: sourceChainId,
       });
-      await waitForTransactionReceipt(wagmiConfig, { hash: approveTx, chainId: sourceChainId });
+      await waitForReceiptWithRetry(approveTx, sourceChainId);
       setState(prev => ({ ...prev, approveTxHash: approveTx }));
 
       // Get exact relay fee from Bridge Adapter (contract enforces strict equality)
@@ -86,7 +87,7 @@ export function useEVMBridge({ sourceChain, destChain }: UseEVMBridgeOptions) {
         chainId: sourceChainId,
         value: relayerFee,
       });
-      await waitForTransactionReceipt(wagmiConfig, { hash: bridgeTx, chainId: sourceChainId });
+      await waitForReceiptWithRetry(bridgeTx, sourceChainId);
 
       setState(prev => ({ ...prev, step: 'waiting-relay', bridgeTxHash: bridgeTx }));
       return { approveTxHash: approveTx, bridgeTxHash: bridgeTx };

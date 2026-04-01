@@ -2,7 +2,8 @@
 
 import { useState, useCallback } from 'react';
 import { useAccount, useWriteContract, useConfig } from 'wagmi';
-import { readContract, waitForTransactionReceipt, switchChain } from '@wagmi/core';
+import { readContract, switchChain } from '@wagmi/core';
+import { waitForReceiptWithRetry } from '@/lib/utils/waitForReceipt';
 import { parseUnits } from 'viem';
 import { CONTRACTS } from '@/lib/contracts/addresses';
 import { ERC20_ABI } from '@/lib/contracts/abis/erc20';
@@ -230,10 +231,7 @@ export function useCompoundEVMBridge({ sourceChain, destChain }: UseCompoundEVMB
           chainId: sourceChainId,
         });
 
-        await waitForTransactionReceipt(wagmiConfig, {
-          hash: lockboxTx,
-          chainId: sourceChainId,
-        });
+        await waitForReceiptWithRetry(lockboxTx, sourceChainId);
 
         setState(prev => ({
           ...prev,
@@ -277,10 +275,7 @@ export function useCompoundEVMBridge({ sourceChain, destChain }: UseCompoundEVMB
         value: relayerFee,
       });
 
-      await waitForTransactionReceipt(wagmiConfig, {
-        hash: bridgeTx,
-        chainId: sourceChainId,
-      });
+      await waitForReceiptWithRetry(bridgeTx, sourceChainId);
 
       setState(prev => ({
         ...prev,
