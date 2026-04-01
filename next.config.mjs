@@ -26,7 +26,7 @@ const nextConfig = {
               // Images: self + data URIs + wallet icons + PNF assets
               "img-src 'self' data: blob: https://pocket.network https://*.walletconnect.com https://*.coinbase.com",
               // Connect: RPC endpoints + Wormholescan API + wallet providers
-              "connect-src 'self' https://eth.api.pocket.network https://base.api.pocket.network https://solana.api.pocket.network https://api.mainnet-beta.solana.com https://solana-mainnet.rpc.extrnode.com https://solana.blockrazor.xyz https://arb1.arbitrum.io https://rpc.ankr.com https://api.wormholescan.io https://*.walletconnect.com wss://*.walletconnect.com https://*.coinbase.com",
+              "connect-src 'self' https://eth.api.pocket.network https://base.api.pocket.network https://solana.api.pocket.network https://solana-rpc.publicnode.com https://rpc.ankr.com https://arb1.arbitrum.io https://rpc.ankr.com https://api.wormholescan.io https://*.walletconnect.com wss://*.walletconnect.com https://*.coinbase.com",
               // Frames: deny embedding entirely (clickjacking protection)
               "frame-ancestors 'none'",
               // Forms: only allow submission to same origin

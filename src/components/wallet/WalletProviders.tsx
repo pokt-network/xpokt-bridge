@@ -20,9 +20,8 @@ const queryClient = new QueryClient();
  */
 const SOLANA_RPC_ENDPOINTS = [
   'https://solana.api.pocket.network',
-  'https://api.mainnet-beta.solana.com',
-  'https://solana-mainnet.rpc.extrnode.com',
-  'https://solana.blockrazor.xyz',
+  'https://solana-rpc.publicnode.com',
+  'https://rpc.ankr.com/solana',
 ];
 
 /** Max acceptable latency before we consider an endpoint too slow */
