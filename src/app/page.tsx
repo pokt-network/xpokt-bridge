@@ -33,32 +33,40 @@ export default function Home() {
       <div style={{ position: 'relative', zIndex: 2, minHeight: '100vh' }}>
         <Header />
 
-        {/* Maintenance banner */}
+        {/* Maintenance overlay */}
         <div
           style={{
-            maxWidth: 520,
-            margin: '0 auto 0',
-            padding: '0 24px',
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0,0,0,0.90)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+            overflow: 'hidden',
           }}
         >
           <div
             style={{
               background: 'rgba(255,197,71,0.12)',
               border: '1px solid rgba(255,197,71,0.35)',
-              borderRadius: 12,
-              padding: 16,
-              marginBottom: 24,
-              fontSize: 13,
-              lineHeight: 1.55,
+              borderRadius: 16,
+              padding: '32px 36px',
+              maxWidth: 520,
+              width: '100%',
+              fontSize: 15,
+              lineHeight: 1.65,
               color: 'rgba(255,255,255,0.85)',
+              textAlign: 'left',
             }}
           >
-            <span style={{ color: '#ffc547', fontWeight: 600 }}>
-              {'\u26A0\uFE0F'} Attention:
+            <div style={{ fontSize: 32, marginBottom: 16 }}>{'\u26A0\uFE0F'}</div>
+            <span style={{ color: '#ffc547', fontWeight: 700 }}>
+              MAINTENANCE MODE:
             </span>{' '}
-            The multichain bridge will enter maintenance mode at 11:30AM EST.
-            It is expected to be offline for several hours while we upgrade to
-            meet Wormhole&apos;s{' '}
+            The bridge is now in maintenance mode. It is expected to be offline
+            for several hours while we upgrade to meet Wormhole&apos;s{' '}
             <a
               href="https://wormhole.com/blog/migrating-from-standard-relay-to-executor-relay-what-every-wormhole-builder-needs-to-know"
               target="_blank"
@@ -71,7 +79,7 @@ export default function Home() {
           </div>
         </div>
 
-        <main style={{ maxWidth: 520, margin: '0 auto', padding: '0 24px 48px' }}>
+        <main style={{ pointerEvents: 'none' }} aria-disabled="true" style={{ maxWidth: 520, margin: '0 auto', padding: '0 24px 48px' }}>
           {/* Headline */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
             <h1 style={{ fontSize: 28, fontWeight: 600, color: '#ffc547', marginBottom: 18 }}>
