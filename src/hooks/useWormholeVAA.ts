@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { WORMHOLE_API_BASE, fetchVAABytes } from '@/lib/wormhole/client';
+import { WORMHOLE_API_BASE, fetchVAABytes, fetchVAAFromOperations } from '@/lib/wormhole/client';
 
 interface VAA {
   vaaBytes: string;
@@ -48,16 +48,21 @@ export function useWormholeVAA() {
 
     while (attempts < maxAttempts) {
       try {
-        // Primary: tx indexer — resolves emitter details and VAA together.
-        // Caches emitter details as soon as they appear, even before the VAA is ready.
-        const primaryPromise = fetch(`${WORMHOLE_API_BASE}/transactions/${txHash}`)
+        // Primary: /operations endpoint — works for BOTH EVM and Solana tx hashes.
+        // The /transactions endpoint returns 404 for Solana tx hashes.
+        // VAA bytes are returned as base64, converted to hex by fetchVAAFromOperations.
+        const operationsPromise = fetchVAAFromOperations(txHash);
+
+        // Secondary: /transactions endpoint — legacy path, only works for EVM hashes.
+        // Kept as fallback in case /operations is temporarily unavailable.
+        const txPromise = fetch(`${WORMHOLE_API_BASE}/transactions/${txHash}`)
           .then(async (res): Promise<VAA | null> => {
             if (!res.ok) return null;
             const data = await res.json();
             const tx = data.data;
             if (!tx) return null;
 
-            // Cache emitter details for the fallback path on this and future iterations.
+            // Cache emitter details for the tertiary path.
             if (tx.emitterChain && tx.emitterAddress && tx.sequence && !emitterRef.current) {
               emitterRef.current = {
                 chain: tx.emitterChain,
@@ -76,29 +81,38 @@ export function useWormholeVAA() {
           })
           .catch(() => null);
 
-        // Fallback: VAA store — a separate backend from the tx indexer.
-        // Responds faster when the indexer is lagging but guardians have already signed.
-        // Only available once emitter details are known from a prior indexer response.
-        // Snapshot ref fields into local variables before the async path.
-        // TypeScript narrows ternary conditions unreliably in some versions;
-        // if/else + destructuring guarantees the types are concrete primitives.
+        // Tertiary: VAA store — direct query once emitter details are known.
         const emitterSnapshot = emitterRef.current;
-        let fallbackPromise: Promise<VAA | null>;
+        let vaaStorePromise: Promise<VAA | null>;
         if (emitterSnapshot !== null) {
           const { chain, address, sequence } = emitterSnapshot;
-          fallbackPromise = fetchVAABytes(chain, address, sequence).then(
+          vaaStorePromise = fetchVAABytes(chain, address, sequence).then(
             (vaaBytes): VAA | null => {
               if (!vaaBytes) return null;
               return { vaaBytes, emitterChain: chain, emitterAddress: address, sequence };
             },
           );
         } else {
-          fallbackPromise = Promise.resolve(null);
+          vaaStorePromise = Promise.resolve(null);
         }
 
-        // Fire both in parallel; prefer primary, fall back to VAA store.
-        const [primary, fallback] = await Promise.all([primaryPromise, fallbackPromise]);
-        const vaa = primary ?? fallback;
+        // Fire all in parallel; prefer operations, then tx, then VAA store.
+        const [opsResult, txResult, vaaStoreResult] = await Promise.all([
+          operationsPromise,
+          txPromise,
+          vaaStorePromise,
+        ]);
+
+        // Also cache emitter details from operations result for future iterations
+        if (opsResult && !emitterRef.current) {
+          emitterRef.current = {
+            chain: opsResult.emitterChain,
+            address: opsResult.emitterAddress,
+            sequence: opsResult.sequence,
+          };
+        }
+
+        const vaa = opsResult ?? txResult ?? vaaStoreResult;
 
         if (vaa) {
           setState(prev => ({ ...prev, vaa, isPolling: false }));
