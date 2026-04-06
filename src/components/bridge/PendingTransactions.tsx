@@ -2,8 +2,6 @@
 
 import { useCallback } from 'react';
 import { useBridgeContext } from '@/context/BridgeContext';
-import { useUnifiedSolanaBridge } from '@/hooks/useUnifiedSolanaBridge';
-import { useCompoundSolanaBridge } from '@/hooks/useCompoundSolanaBridge';
 import type { StoredTransaction, TxStatus } from '@/types/transactions';
 
 // ============================================================================
@@ -40,28 +38,22 @@ export function PendingBadge() {
 
 export function PendingTransactionsModal() {
   const { state, dispatch } = useBridgeContext();
-  const unifiedSolana = useUnifiedSolanaBridge({ direction: 'fromSolana' });
-  const compoundSolana = useCompoundSolanaBridge();
 
-  const handleResume = useCallback(async (tx: StoredTransaction) => {
+  const handleResume = useCallback((tx: StoredTransaction) => {
     if (!tx.sourceTxHash) return;
 
-    dispatch({ type: 'UPDATE_PENDING_TX', payload: { id: tx.id, updates: { status: 'waiting-vaa' } } });
-    dispatch({ type: 'TOGGLE_PENDING_MODAL', payload: false });
-
-    try {
-      if (tx.destChain === 'solana') {
-        // ETH → Solana: resume via compound Solana bridge
-        await compoundSolana.resumeFromVAA(tx.sourceTxHash);
-      } else if (tx.sourceChain === 'solana') {
-        // Solana → ETH: resume via unified Solana bridge
-        await unifiedSolana.resumeFromVAA(tx.sourceTxHash, 'Solana');
-      }
-    } catch (error: any) {
-      console.error('[PendingTx] Resume failed:', error);
-      dispatch({ type: 'UPDATE_PENDING_TX', payload: { id: tx.id, updates: { status: 'error' } } });
+    // Switch to the Solana tab and set the correct direction
+    dispatch({ type: 'SET_TAB', payload: 'solana' });
+    if (tx.destChain === 'solana') {
+      dispatch({ type: 'SET_SOLANA_DIRECTION', payload: 'toSolana' });
+    } else if (tx.sourceChain === 'solana') {
+      dispatch({ type: 'SET_SOLANA_DIRECTION', payload: 'fromSolana' });
     }
-  }, [dispatch, compoundSolana, unifiedSolana]);
+
+    // Dispatch resume request — BridgeCard's SolanaBridgeContent picks this up
+    dispatch({ type: 'SET_RESUME_REQUEST', payload: tx });
+    dispatch({ type: 'TOGGLE_PENDING_MODAL', payload: false });
+  }, [dispatch]);
 
   if (!state.showPendingModal) return null;
 
@@ -233,7 +225,7 @@ function TransactionItem({
           {/* Explorer link */}
           {tx.sourceTxHash && (
             <a
-              href={getExplorerUrl(tx.sourceChain, tx.sourceTxHash)}
+              href={`https://wormholescan.io/#/tx/${tx.sourceTxHash}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-[#4c9bf5] hover:text-[#4c9bf5]/80"

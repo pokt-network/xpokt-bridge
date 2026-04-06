@@ -28,6 +28,8 @@ export interface BridgeState {
   currentTxId: string | null;
   pendingTransactions: StoredTransaction[];
   showPendingModal: boolean;
+  // Resume request: set by PendingTransactionsModal, consumed by BridgeCard
+  resumeRequest: StoredTransaction | null;
 }
 
 const initialState: BridgeState = {
@@ -41,6 +43,7 @@ const initialState: BridgeState = {
   currentTxId: null,
   pendingTransactions: [],
   showPendingModal: false,
+  resumeRequest: null,
 };
 
 // ============================================================================
@@ -63,6 +66,7 @@ type BridgeAction =
   | { type: 'REMOVE_PENDING_TX'; payload: string }
   | { type: 'SET_PENDING_TRANSACTIONS'; payload: StoredTransaction[] }
   | { type: 'TOGGLE_PENDING_MODAL'; payload?: boolean }
+  | { type: 'SET_RESUME_REQUEST'; payload: StoredTransaction | null }
   | { type: 'RESET_FORM' }
   | { type: 'RESET_ALL' };
 
@@ -157,11 +161,14 @@ function bridgeReducer(state: BridgeState, action: BridgeAction): BridgeState {
         showPendingModal: action.payload ?? !state.showPendingModal
       };
 
+    case 'SET_RESUME_REQUEST':
+      return { ...state, resumeRequest: action.payload };
+
     case 'RESET_FORM':
       return { ...state, amount: '', isProcessing: false, currentTxId: null };
 
     case 'RESET_ALL':
-      return { ...initialState, pendingTransactions: state.pendingTransactions };
+      return { ...initialState, pendingTransactions: state.pendingTransactions, resumeRequest: null };
 
     default:
       return state;
