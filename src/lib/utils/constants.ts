@@ -1,5 +1,8 @@
 export const TOKEN_DECIMALS = 6;
 
+// EVM bridge claim bot minimum (relayer won't process transfers below this)
+export const MIN_EVM_BRIDGE_POKT = 100;
+
 export const COLORS = {
   offWhite: '#f6f6f6',
   primaryBlue: '#025af2',

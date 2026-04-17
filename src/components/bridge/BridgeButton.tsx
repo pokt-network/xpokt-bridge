@@ -6,6 +6,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useBridgeContext } from '@/context/BridgeContext';
 import { useTokenBalances } from '@/hooks/useTokenBalances';
 import { getChainName } from '@/lib/chains/chainRegistry';
+import { MIN_EVM_BRIDGE_POKT } from '@/lib/utils/constants';
 
 interface BridgeButtonProps {
   onBridge: () => void;
@@ -53,6 +54,9 @@ export function BridgeButton({ onBridge, isProcessing = false }: BridgeButtonPro
     disabled = true;
   } else if (parseFloat(state.amount) > parseFloat(balance.formatted)) {
     buttonText = 'Insufficient Balance';
+    disabled = true;
+  } else if (state.activeTab === 'evm' && parseFloat(state.amount) < MIN_EVM_BRIDGE_POKT) {
+    buttonText = `Minimum ${MIN_EVM_BRIDGE_POKT} POKT`;
     disabled = true;
   } else {
     buttonText = `Bridge to ${getChainName(destChain!)}`;

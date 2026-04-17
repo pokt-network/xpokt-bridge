@@ -5,6 +5,7 @@ import { useTokenBalances } from '@/hooks/useTokenBalances';
 import { TokenIcon } from '@/components/shared/TokenIcon';
 import { sanitizeAmountInput } from '@/lib/utils/validation';
 import { formatNumber } from '@/lib/utils/format';
+import { MIN_EVM_BRIDGE_POKT } from '@/lib/utils/constants';
 
 export function AmountInput() {
   const { state, setAmount, sourceChain } = useBridgeContext();
@@ -23,6 +24,15 @@ export function AmountInput() {
     !!state.amount &&
     parseFloat(state.amount) > parseFloat(balance.formatted);
 
+  // EVM auto-relay claim bot won't process transfers under 100 POKT.
+  const isBelowMinimum =
+    state.activeTab === 'evm' &&
+    !!state.amount &&
+    parseFloat(state.amount) > 0 &&
+    parseFloat(state.amount) < MIN_EVM_BRIDGE_POKT;
+
+  const hasError = isInsufficientBalance || isBelowMinimum;
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const sanitized = sanitizeAmountInput(e.target.value);
     setAmount(sanitized);
@@ -37,7 +47,7 @@ export function AmountInput() {
       style={{
         background: '#171c1f',
         borderRadius: 16,
-        border: `1px solid ${isInsufficientBalance ? '#ff5a5f' : 'rgba(255,255,255,0.08)'}`,
+        border: `1px solid ${hasError ? '#ff5a5f' : 'rgba(255,255,255,0.08)'}`,
         padding: 20,
         marginBottom: 16,
       }}
@@ -120,6 +130,11 @@ export function AmountInput() {
       {isInsufficientBalance && (
         <div style={{ marginTop: 8, fontSize: 12, color: '#ff5a5f' }}>
           Insufficient balance
+        </div>
+      )}
+      {!isInsufficientBalance && isBelowMinimum && (
+        <div style={{ marginTop: 8, fontSize: 12, color: '#ff5a5f' }}>
+          Minimum {MIN_EVM_BRIDGE_POKT} POKT
         </div>
       )}
     </div>
