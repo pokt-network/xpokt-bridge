@@ -52,21 +52,44 @@ export class SolanaWalletSigner<N extends Network, C extends Chain>
       // Add priority fee instructions so the transaction is competitive
       // on a congested network. Uses the SDK helper that queries recent
       // fee percentiles and emits SetComputeUnitLimit + SetComputeUnitPrice.
-      try {
-        const priorityIxs = await createPriorityFeeInstructions(
-          this._connection,
-          tx,
-          75,   // 75th percentile of recent fees
-          1.2,  // 1.2x multiplier
-          1_000,    // min 1,000 microlamports
-          500_000,  // max 500,000 microlamports
-        );
-        // Prepend priority instructions (must come before program instructions)
-        if (priorityIxs.length > 0) {
-          tx.instructions = [...priorityIxs, ...tx.instructions];
+      //
+      // CRITICAL: these MUST be APPENDED, never prepended. The Wormhole
+      // `verify_signatures` transaction (built while posting the VAA during
+      // an ETH→Solana claim) contains a Secp256k1 precompile instruction
+      // whose data offsets reference the signatures/messages by ABSOLUTE
+      // instruction index — and the SDK hardcodes that index to 0, i.e. the
+      // precompile expects to sit at instruction index 0. Prepending shifts
+      // the precompile to a later index while its embedded offsets still
+      // point at index 0 (now a ComputeBudget instruction), so the precompile
+      // reads the wrong data and the whole transaction fails on-chain with
+      // `InstructionError [n, Custom: 2]`, blocking every claim.
+      //
+      // ComputeBudget instructions are position-independent (the runtime
+      // scans the entire message for them before execution), so appending
+      // sets the fee/limit without disturbing any precompile index refs.
+      // Guard against duplicates in case a tx already carries a budget.
+      const COMPUTE_BUDGET_PROGRAM_ID =
+        'ComputeBudget111111111111111111111111111111';
+      const alreadyHasComputeBudget = tx.instructions.some(
+        (ix) => ix.programId.toBase58() === COMPUTE_BUDGET_PROGRAM_ID,
+      );
+      if (!alreadyHasComputeBudget) {
+        try {
+          const priorityIxs = await createPriorityFeeInstructions(
+            this._connection,
+            tx,
+            75,   // 75th percentile of recent fees
+            1.2,  // 1.2x multiplier
+            1_000,    // min 1,000 microlamports
+            500_000,  // max 500,000 microlamports
+          );
+          // APPEND — never prepend (see note above).
+          if (priorityIxs.length > 0) {
+            tx.instructions = [...tx.instructions, ...priorityIxs];
+          }
+        } catch {
+          // Non-fatal — transaction can still land without priority fees
         }
-      } catch {
-        // Non-fatal — transaction can still land without priority fees
       }
 
       // Sign with any additional signers the SDK attached (e.g., the
