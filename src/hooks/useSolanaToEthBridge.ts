@@ -154,12 +154,14 @@ export function useSolanaToEthBridge() {
       // assertion guard — it does NOT auto-switch — so we must proactively
       // switch the wallet to Ethereum first, or writeContractAsync throws
       // "current chain of the wallet does not match the target chain".
-      try {
-        await switchChain(config, { chainId: 1 });
-      } catch {
-        throw new Error(
-          'Please switch your wallet to the Ethereum network to claim your tokens, then try again.'
-        );
+      if (currentChainId !== 1) {
+        try {
+          await switchChain(config, { chainId: 1 });
+        } catch {
+          throw new Error(
+            'Please switch your wallet to the Ethereum network to claim your tokens, then try again.'
+          );
+        }
       }
 
       // Convert the VAA hex string to bytes for the contract call
