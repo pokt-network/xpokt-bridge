@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { useAccount, useWriteContract } from 'wagmi';
+import { useAccount, useWriteContract, useConfig } from 'wagmi';
+import { switchChain } from '@wagmi/core';
 import { waitForReceiptWithRetry } from '@/lib/utils/waitForReceipt';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { Wormhole, type TokenTransfer } from '@wormhole-foundation/sdk';
@@ -30,6 +31,7 @@ export function useSolanaToEthBridge() {
   const vaaHook = useWormholeVAA();
   const { address: evmAddress } = useAccount();
   const { writeContractAsync } = useWriteContract();
+  const config = useConfig();
   const { publicKey: solanaPublicKey, signTransaction } = useWallet();
   const { connection } = useConnection();
 
@@ -145,6 +147,21 @@ export function useSolanaToEthBridge() {
     setState(prev => ({ ...prev, step: 'completing' }));
 
     try {
+      // Redemption happens on Ethereum (chainId 1). The wallet is very often
+      // on Base at this point (e.g. after an EVM bridge, or because a wallet
+      // like Rabby follows whatever chain the dApp last requested and has no
+      // manual network toggle). wagmi's `chainId` arg below is only an
+      // assertion guard — it does NOT auto-switch — so we must proactively
+      // switch the wallet to Ethereum first, or writeContractAsync throws
+      // "current chain of the wallet does not match the target chain".
+      try {
+        await switchChain(config, { chainId: 1 });
+      } catch {
+        throw new Error(
+          'Please switch your wallet to the Ethereum network to claim your tokens, then try again.'
+        );
+      }
+
       // Convert the VAA hex string to bytes for the contract call
       const vaaData = vaaBytes.startsWith('0x') ? vaaBytes : `0x${vaaBytes}`;
 
@@ -164,7 +181,7 @@ export function useSolanaToEthBridge() {
       setState(prev => ({ ...prev, step: 'error', error: error.message }));
       throw error;
     }
-  }, [evmAddress, writeContractAsync]);
+  }, [evmAddress, writeContractAsync, config]);
 
   const resumeFromVAA = useCallback(async (sourceTxHash: string, _sourceChain: string) => {
     setState(prev => ({
