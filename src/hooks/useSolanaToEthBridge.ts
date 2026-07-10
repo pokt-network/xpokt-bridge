@@ -183,7 +183,7 @@ export function useSolanaToEthBridge() {
       setState(prev => ({ ...prev, step: 'error', error: error.message }));
       throw error;
     }
-  }, [evmAddress, writeContractAsync, config]);
+  }, [evmAddress, writeContractAsync, config, currentChainId]);
 
   const resumeFromVAA = useCallback(async (sourceTxHash: string, _sourceChain: string) => {
     setState(prev => ({
