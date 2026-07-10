@@ -29,7 +29,7 @@ interface SolanaToEthBridgeState {
 
 export function useSolanaToEthBridge() {
   const vaaHook = useWormholeVAA();
-  const { address: evmAddress } = useAccount();
+  const { address: evmAddress, chainId: currentChainId } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const config = useConfig();
   const { publicKey: solanaPublicKey, signTransaction } = useWallet();
