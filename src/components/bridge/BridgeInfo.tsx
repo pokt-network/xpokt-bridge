@@ -26,29 +26,29 @@ export function BridgeInfo() {
   const { sourceChain, destChain, state } = useBridgeContext();
 
   const isSolana = state.activeTab === 'solana';
-
-  // Don't render until chains are selected (EVM tab with null chains)
-  if (!sourceChain || !destChain) return null;
+  const hasChains = !!sourceChain && !!destChain;
 
   const bridgeType = isSolana ? 'Wormhole Token Bridge' : 'xPOKT Bridge Adapter';
   const estimatedTime = isSolana ? '15-25 minutes' : '2-20 minutes';
 
-  // Determine which chain's Bridge Adapter to query for relay fee
-  const sourceChainId = isSolana ? 1 : getEvmChainId(sourceChain);
+  // Determine which chain's Bridge Adapter to query for relay fee.
+  // Only resolved once both chains are selected — the registry helpers throw on unknown ids.
+  const sourceChainId = isSolana ? 1 : (sourceChain ? getEvmChainId(sourceChain) : undefined);
   const bridgeAdapterAddress = isSolana
     ? CONTRACTS.ethereum.bridgeAdapter
-    : (CONTRACTS[sourceChain as keyof typeof CONTRACTS] as any).bridgeAdapter;
-  const destWormholeChainId = getWormholeChainId(destChain);
+    : (sourceChain ? (CONTRACTS[sourceChain as keyof typeof CONTRACTS] as any).bridgeAdapter : undefined);
+  const destWormholeChainId = destChain ? getWormholeChainId(destChain) : undefined;
 
-  // Live relay fee quote from on-chain bridgeCost() — only for EVM↔EVM tab
+  // Live relay fee quote from on-chain bridgeCost() — only for EVM↔EVM tab.
+  // Hooks must run on every render, so this sits above the early return and is disabled until chains are set.
   const { data: relayFeeWei, isLoading: feeLoading } = useReadContract({
     address: bridgeAdapterAddress as `0x${string}`,
     abi: BRIDGE_ADAPTER_ABI,
     functionName: 'bridgeCost',
-    args: [destWormholeChainId],
+    args: destWormholeChainId != null ? [destWormholeChainId] : undefined,
     chainId: sourceChainId,
     query: {
-      enabled: !isSolana, // Only fetch for EVM↔EVM bridges
+      enabled: !isSolana && hasChains, // Only fetch for EVM↔EVM bridges with both chains selected
       refetchInterval: 60_000, // Refresh every 60 seconds
       staleTime: 30_000,
     },
@@ -59,6 +59,9 @@ export function BridgeInfo() {
     if (relayFeeWei != null) return formatFeeETH(relayFeeWei as bigint);
     return '— ETH (relayer)';
   }, [relayFeeWei, feeLoading]);
+
+  // Don't render until chains are selected (EVM tab with null chains)
+  if (!sourceChain || !destChain) return null;
 
   return (
     <div
