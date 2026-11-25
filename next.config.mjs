@@ -3,6 +3,9 @@ const require = createRequire(import.meta.url);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // /_next/image is off: the app has no images that need resizing, and with no
+  // `images` config the optimizer fetches any of the app's own routes by URL.
+  images: { unoptimized: true },
   // ---------------------------------------------------------------------------
   // Security Headers
   // ---------------------------------------------------------------------------
