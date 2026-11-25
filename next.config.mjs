@@ -3,9 +3,10 @@ const require = createRequire(import.meta.url);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // /_next/image is off: the app has no images that need resizing, and with no
-  // `images` config the optimizer fetches any of the app's own routes by URL.
-  images: { unoptimized: true },
+  // /_next/image is off. `unoptimized` turns off Next's own optimizer (self-hosted);
+  // on Vercel the hosted image service still runs, and with no localPatterns it
+  // fetches any of the app's own routes by URL. Empty lists allow no source at all.
+  images: { unoptimized: true, remotePatterns: [], localPatterns: [] },
   // ---------------------------------------------------------------------------
   // Security Headers
   // ---------------------------------------------------------------------------
